@@ -8,17 +8,23 @@ class MdFile {
     val name: String get() = contentFile.name
     var viewType: ViewType = ViewType.CHAT // FIXME:
         set(value) {
-            if (!loaded)
-                load()
             field = value
             save()
         }
-    var content: String = ""
-        set(value) {
+        get() {
             if (!loaded)
                 load()
+            return field
+        }
+    var content: String = ""
+        set(value) {
             field = value
             save()
+        }
+        get() {
+            if (!loaded)
+                load()
+            return field
         }
     private var loaded = false
 
@@ -34,6 +40,8 @@ class MdFile {
 
     private fun load() {
         synchronized(this) {
+            if (loaded) return
+            loaded = true
             val lines = contentFile.readLines()
             require(lines.isNotEmpty()) { "File is empty" }
             viewType = viewTypeFromString(lines.first()) ?: ViewType.CHAT
@@ -42,7 +50,6 @@ class MdFile {
             } else {
                 ""
             }
-            loaded = true
         }
     }
 
@@ -62,7 +69,7 @@ class MdFile {
         synchronized(this) {
             if (!nameValid(dataManager, name) || !contentFile.createNewFile())
                 return false
-            save()
+            contentFile.writeText(ViewType.CHAT.toStringValue())
             return true
         }
     }

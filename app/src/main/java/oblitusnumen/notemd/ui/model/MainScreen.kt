@@ -68,7 +68,7 @@ class MainScreen(private val dataManager: DataManager) {
         ) {
             Text(
                 modifier = Modifier.weight(1.0f).padding(start = 8.dp, end = 8.dp).align(Alignment.CenterVertically),
-                text = mdFile.name as String,
+                text = mdFile.name,
                 style = MaterialTheme.typography.headlineSmall,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,

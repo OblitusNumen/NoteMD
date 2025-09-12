@@ -25,7 +25,7 @@ class DataManager(val context: Context) {
     fun getMdProjects(): List<MdFile> {
         val result: MutableList<MdFile> = ArrayList()
         for (mdFile in mdDir.listFiles()?.filter { it.name.endsWith(".md") }
-            ?.sortedBy { Files.readAttributes(it.toPath(), BasicFileAttributes::class.java).creationTime() }
+            ?.sortedByDescending { Files.readAttributes(it.toPath(), BasicFileAttributes::class.java).lastModifiedTime() }
             ?: throw IOException("Could not list files from directory")) {
             result.add(MdFile(this, mdFile))
         }
