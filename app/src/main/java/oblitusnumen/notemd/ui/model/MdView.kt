@@ -20,7 +20,7 @@ import oblitusnumen.notemd.impl.MdFile
 import oblitusnumen.notemd.ui.MarkdownView
 
 class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
-    var content by mutableStateOf(TextFieldValue(mdFile.content.ifEmpty { "\n" }))
+    var content by mutableStateOf(TextFieldValue(mdFile.content))
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
@@ -49,11 +49,7 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                     value = content,
                     onValueChange = { newValue ->
                         // TODO: undo history
-                        content = if (newValue.text.isEmpty()) {
-                            TextFieldValue("\n")
-                        } else {
-                            newValue
-                        }
+                        content = newValue
                         mdFile.content = content.text
                     },
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp),

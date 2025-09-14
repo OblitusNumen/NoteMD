@@ -1,12 +1,21 @@
 package oblitusnumen.notemd.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import oblitusnumen.notemd.impl.*
 
@@ -15,14 +24,14 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
     val blocks: MutableList<Pair<Context, @Composable () -> Unit>> = mutableListOf()
     val split = markdown.split('\n')
     var context: Context = Context.NONE
-    var cache: String = ""
-    var prevListSymbol: Char = ' '
+    var cache = ""
+    var prevListSymbol = ' '
     var previousLevel: Int = -1
-    var leadingWhitespace: Int = 0
-    var previousWhitespaces: Int = 0
-    var previousSpace: Int = 0
+    var leadingWhitespace = 0
+    var previousWhitespaces = 0
+    var previousSpace = 0
     var checkbox: Int = -1
-    var language: String = ""
+    var language = ""
     val pushBlock = {
         if (context != Context.NONE) {
             val contextC: Context = context
@@ -40,8 +49,159 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                     Context.NONE -> throw RuntimeException("unreachable")
                     Context.TEXT -> {
                         {
+                            val text = cacheC
+                                .replace("  \n", "\n\n")
+                                .normalizeWhitespaces()
+                                .replace(" \n", "\n")
+                                .replace('\n', ' ')
+                                .replace("  ", " \n")
+                            val annotations = mutableListOf<Pair<TextAnnotationType, String>>()
+                            val strings = text.split('`')
+                            var isCode = false
+                            var lastCode = -1
+                            val pointers = Pointers()
+                            repeat(strings.size) {
+                                val current = strings[it]
+                                if (current.isEmpty()) {
+                                    val lastAnnotation = annotations.lastOrNull()
+                                    if (lastAnnotation != null) {
+                                        if (!isCode) {// ` `|`
+                                            if (it == strings.lastIndex) {
+                                                annotations.add(TextAnnotationType.END_CODE to "`")
+                                            } else {
+                                                isCode = true
+                                                annotations[annotations.size - 1] =
+                                                    TextAnnotationType.TEXT to lastAnnotation.second + "`"
+                                            }
+                                        } else {
+                                            val text = lastAnnotation.second
+                                            if (lastAnnotation.first == TextAnnotationType.BEGIN_CODE) {
+                                                annotations[annotations.size - 1] = TextAnnotationType.TEXT to "``"
+                                            } else if (lastAnnotation.first == TextAnnotationType.TEXT && text.lastOrNull() == '`') {
+                                                annotations[annotations.size - 1] = TextAnnotationType.TEXT to "$text`"
+                                            }
+                                        }
+                                    } else if (isCode) {
+                                        annotations.add(TextAnnotationType.TEXT to "``")
+                                        isCode = false
+                                    } else
+                                        isCode = true
+                                    return@repeat
+                                }
+                                if (isCode) {
+                                    val lastAnnotation = annotations.lastOrNull()
+                                    if (lastAnnotation != null && lastAnnotation.second.lastOrNull() == '`') {
+                                        annotations[annotations.size - 1] =
+                                            TextAnnotationType.TEXT to lastAnnotation.second + "`"
+                                    } else {
+                                        annotations.add(TextAnnotationType.BEGIN_CODE to "`")
+                                    }
+                                    lastCode = annotations.size - 1
+                                    annotations.add(
+                                        TextAnnotationType.TEXT to current
+                                    )
+                                    isCode = false
+                                    return@repeat
+                                }
+                                isCode = true
+                                if (lastCode != -1) {
+                                    lastCode = -1
+                                    annotations.add(TextAnnotationType.END_CODE to "")
+                                }
+                                var newCurrent = current
+                                while (true) {
+                                    // FIXME: this makes nested links possible
+                                    val result = removeFirstMarkdownLink(newCurrent)
+                                    newCurrent = result.first
+                                    val index = result.second
+                                    val link = result.third
+                                    if (index == null) {
+                                        parseText(annotations, newCurrent, pointers)
+                                        break
+                                    }
+                                    val isPic = index != 0 && newCurrent[index - 1] == '!'
+                                    var part: String
+                                    if (isPic) {
+                                        part = newCurrent.substring(0, index - 1)
+                                    } else {
+                                        part = newCurrent.substring(0, index)
+                                    }
+
+                                    // FIXME: code insert may be inside link text
+                                    // parse text before link
+                                    parseText(annotations, part, pointers)
+
+                                    val linkIndex = link!!.lastIndexOf("](")
+                                    annotations.add(
+                                        (
+                                                if (isPic)
+                                                    TextAnnotationType.BEGIN_PIC
+                                                else
+                                                    TextAnnotationType.BEGIN_LINK
+                                                ) to link.substring(linkIndex + 2, link.length - 1)
+                                    )
+                                    val linkText = link.substring(1, linkIndex)
+
+                                    // parse link text
+                                    parseText(annotations, linkText, pointers)
+
+                                    annotations.add(TextAnnotationType.END_LINK to "")
+                                    newCurrent = newCurrent.substring(index)
+                                }
+                            }
+                            if (lastCode != -1) {
+                                annotations[lastCode] = TextAnnotationType.TEXT to annotations[lastCode].second
+                                lastCode = -1
+                                val removeLastOrNull = annotations.removeLastOrNull()
+                                if (removeLastOrNull != null) {
+                                    val text = removeLastOrNull.second
+                                    parseText(annotations, text, pointers)
+                                }
+                            }
+                            if (pointers.lastStrikethrough != -1) {
+                                annotations[pointers.lastStrikethrough] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastStrikethrough].second
+                                pointers.lastStrikethrough = -1
+                            }
+                            if (pointers.lastItalic_ != -1) {
+                                annotations[pointers.lastItalic_] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
+                                pointers.lastItalic_ = -1
+                            }
+                            if (pointers.lastItalicStar != -1) {
+                                annotations[pointers.lastItalicStar] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
+                                pointers.lastItalicStar = -1
+                            }
+                            if (pointers.lastBold_ != -1) {
+                                annotations[pointers.lastBold_] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
+                                pointers.lastBold_ = -1
+                            }
+                            if (pointers.lastBoldStar != -1) {
+                                annotations[pointers.lastBoldStar] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
+                                pointers.lastBoldStar = -1
+                            }
+
+                            // rendering
+                            val annotated = buildAnnotated(annotations)
+                            val uriHandler = LocalUriHandler.current
                             Text(text = "text")
-                            Text(text = cacheC.replace('\n', ' '), style = MaterialTheme.typography.bodyMedium)
+                            ClickableText(
+                                text = annotated,
+                                onClick = { offset ->
+                                    annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                        .firstOrNull()?.let { annotation ->
+                                            uriHandler.openUri(annotation.item)
+                                        }
+                                    annotated.getStringAnnotations(tag = "PIC", start = offset, end = offset)
+                                        .firstOrNull()?.let { annotation ->
+                                            uriHandler.openUri(annotation.item)
+                                        }
+                                },
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
 
@@ -78,18 +238,21 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                             }
                         }
                     }
+
                     Context.SPACER -> {
                         {
                             Text(text = "spacer")
                             Spacer(Modifier.fillMaxWidth().height(16.dp))
                         }
                     }
+
                     Context.DIVIDER -> {
                         {
                             Text(text = "divider")
                             HorizontalDivider(Modifier.padding(4.dp))
                         }
                     }
+
                     Context.TABLE -> {
                         {
                             Text(text = "table")
@@ -104,6 +267,7 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                             }
                         }
                     }
+
                     Context.CODE_BLOCK -> {
                         {
                             Text(text = "code: $languageC")
@@ -124,18 +288,20 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
     }
     repeat(split.size) { index ->
         var current = split[index]
+
         // code block
         if (context == Context.CODE_BLOCK) {
             if (current.countLeadingWhitespaces() >= previousWhitespaces) {
                 current = current.substring(previousWhitespaces)
-            }
-            if (current.trim().countTrailing('`') == previousLevel) {
-                current = current.trimEnd().dropLast(previousLevel)
-                cache += (if (cache.isEmpty()) "" else "\n") + current
+            } else
+                current = current.trimLeadingWhitespaces()
+            if (current.trim().countLeading('`') == previousLevel && current.trim().substring(previousLevel)
+                    .isEmpty()
+            ) {
                 pushBlock()
                 return@repeat
             }
-            cache += "\n" + current
+            cache += (if (cache.isEmpty()) "" else "\n") + current
             return@repeat
         }
 
@@ -236,7 +402,8 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
         if (context == Context.QUOTE) {
             if (current.startsWith('>')) {
                 current = current.substring(1)
-            }
+            } else
+                current = " ".repeat(leadingWhitespace) + current
             cache += "\n" + current
             return@repeat
         }
@@ -249,7 +416,7 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
             } else if (context != Context.TEXT/* && context != Context.QUOTE*/) {
                 pushBlock()
                 context = Context.TEXT_BLOCK
-                cache += "\n" + current.addLeadingSpaces(leadingWhitespace - 4)
+                cache += current.addLeadingSpaces(leadingWhitespace - 4)
                 return@repeat
             }
         } else if (context == Context.TEXT_BLOCK) pushBlock()
@@ -299,7 +466,8 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
 
         // table
         if (context != Context.TEXT && context != Context.LIST_ELEMENT// && context != Context.QUOTE
-            && current.trimEnd().lastOrNull() == '|' && symbol == '|' && split.size >= index + 1) {
+            && current.trimEnd().lastOrNull() == '|' && symbol == '|' && split.size >= index + 1
+        ) {
             if (context == Context.TABLE) {
                 if (prevListSymbol == '-') {
                     prevListSymbol = ' '
@@ -331,7 +499,7 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
         }
 
         // quote start
-        if (current.firstOrNull() == '>') {
+        if (symbol == '>') {
             pushBlock()
             context = Context.QUOTE
             cache = current.substring(1)
@@ -374,6 +542,257 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
 //    }
 }
 
+class Pointers {
+    var lastStrikethrough = -1
+    var lastItalic_ = -1
+    var lastItalicStar = -1
+    var lastBold_ = -1
+    var lastBoldStar = -1
+}
+
+fun parseText(annotations: MutableList<Pair<TextAnnotationType, String>>, part: String, pointers: Pointers) {
+    val words = part.split(' ')
+    val changePreviousAnnotation = { text: String ->
+        val lastAnnotation = annotations.lastOrNull()
+        if (lastAnnotation != null && lastAnnotation.first == TextAnnotationType.TEXT) {
+            annotations[annotations.size - 1] =
+                TextAnnotationType.TEXT to lastAnnotation.second + text
+        } else {
+            annotations.add(TextAnnotationType.TEXT to text)
+        }
+    }
+    repeat(words.size) {
+        var word = words[it]
+        if (it != 0)
+            changePreviousAnnotation(" ")
+        if (word.isEmpty()) {
+            return@repeat
+        }
+        var symbols = getTrailingSymbols(word)
+        word = word.substring(0, word.length - symbols.length)
+        if (word.isEmpty()) {
+            val s = symbols.first()
+            val countLeading = symbols.countLeading(s)
+            if (countLeading != symbols.length) {
+                word = symbols.substring(0, countLeading)
+                symbols = symbols.substring(countLeading)
+            }
+        }
+        if (word.isNotEmpty()) {
+            var firstLoop = true
+            while (true) {
+                val symbol = word.first()
+                val countLeading = word.countLeading(symbol)
+                if (word.length > countLeading) {
+                    if (symbol == '*') {
+                        if (countLeading == 1) {// italic
+                            word = word.substring(1)
+                            if (pointers.lastItalicStar != -1) {
+                                annotations[pointers.lastItalicStar] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_ITALIC to "$symbol")
+                            pointers.lastItalicStar = annotations.size - 1
+                        } else if (countLeading == 2) {// bold
+                            word = word.substring(2)
+                            if (pointers.lastBoldStar != -1) {
+                                annotations[pointers.lastBoldStar] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_BOLD to "$symbol$symbol")
+                            pointers.lastBoldStar = annotations.size - 1
+                        } else {// FIXME: symbols may differ
+                            if (countLeading > 3)
+                                changePreviousAnnotation(
+                                    "$symbol".repeat(
+                                        countLeading - 3
+                                    )
+                                )
+                            word = word.substring(countLeading)
+                            if (pointers.lastItalicStar != -1) {
+                                annotations[pointers.lastItalicStar] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_ITALIC to "$symbol")
+                            pointers.lastItalicStar = annotations.size - 1
+                            if (pointers.lastBoldStar != -1) {
+                                annotations[pointers.lastBoldStar] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_BOLD to "$symbol$symbol")
+                            pointers.lastBoldStar = annotations.size - 1
+                        }
+                    } else if (symbol == '_') {
+                        if (countLeading == 1) {// italic
+                            word = word.substring(1)
+                            if (pointers.lastItalic_ != -1) {
+                                annotations[pointers.lastItalic_] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_ITALIC to "$symbol")
+                            pointers.lastItalic_ = annotations.size - 1
+                        } else if (countLeading == 2) {// bold
+                            word = word.substring(2)
+                            if (pointers.lastBold_ != -1) {
+                                annotations[pointers.lastBold_] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_BOLD to "$symbol$symbol")
+                            pointers.lastBold_ = annotations.size - 1
+                        } else {// FIXME: symbols may differ
+                            if (countLeading > 3)
+                                changePreviousAnnotation(
+                                    "$symbol".repeat(
+                                        countLeading - 3
+                                    )
+                                )
+                            word = word.substring(countLeading)
+                            if (pointers.lastItalic_ != -1) {
+                                annotations[pointers.lastItalic_] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_ITALIC to "$symbol")
+                            pointers.lastItalic_ = annotations.size - 1
+                            if (pointers.lastBold_ != -1) {
+                                annotations[pointers.lastBold_] =
+                                    TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
+                            }
+                            annotations.add(TextAnnotationType.BEGIN_BOLD to "$symbol$symbol")
+                            pointers.lastBold_ = annotations.size - 1
+                        }
+                    } else if (symbol == '~' && countLeading >= 2) {
+                        if (countLeading > 2)
+                            changePreviousAnnotation(
+                                "$symbol".repeat(
+                                    countLeading - 2
+                                )
+                            )
+                        word = word.substring(countLeading)
+                        if (pointers.lastStrikethrough != -1) {
+                            annotations[pointers.lastStrikethrough] =
+                                TextAnnotationType.TEXT to "~~"
+                        }
+                        annotations.add(TextAnnotationType.BEGIN_STRIKETHROUGH to "~~")
+                        pointers.lastStrikethrough = annotations.size - 1
+                    } else {
+                        changePreviousAnnotation(word)
+                        break
+                    }
+                } else {
+                    changePreviousAnnotation(word)
+                    break
+                }
+                firstLoop = false
+            }
+        }
+
+        // handle end of word
+        while (symbols.isNotEmpty()) {
+            val symbol = symbols.first()
+            var countLeading = symbols.countLeading(symbol)
+            symbols = symbols.substring(countLeading)
+            if (symbol == '*') {
+                if (countLeading == 1) {// italic
+                    if (pointers.lastItalicStar != -1) {
+                        annotations.add(TextAnnotationType.END_ITALIC to "")
+                        pointers.lastItalicStar = -1
+                        if (pointers.lastItalic_ != -1) {
+                            annotations[pointers.lastItalic_] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
+                            pointers.lastItalic_ = -1
+                        }
+                        countLeading -= 1
+                    }
+                } else if (countLeading == 2) {// bold
+                    if (pointers.lastBoldStar != -1) {
+                        annotations.add(TextAnnotationType.END_BOLD to "")
+                        pointers.lastBoldStar = -1
+                        if (pointers.lastBold_ != -1) {
+                            annotations[pointers.lastBold_] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
+                            pointers.lastBold_ = -1
+                        }
+                        countLeading -= 2
+                    }
+                } else {// FIXME: symbols may differ
+                    if (pointers.lastBoldStar != -1) {
+                        annotations.add(TextAnnotationType.END_BOLD to "")
+                        pointers.lastBoldStar = -1
+                        if (pointers.lastBold_ != -1) {
+                            annotations[pointers.lastBold_] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
+                            pointers.lastBold_ = -1
+                        }
+                        countLeading -= 2
+                    }
+                    if (pointers.lastItalicStar != -1) {
+                        annotations.add(TextAnnotationType.END_ITALIC to "")
+                        pointers.lastItalicStar = -1
+                        if (pointers.lastItalic_ != -1) {
+                            annotations[pointers.lastItalic_] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
+                            pointers.lastItalic_ = -1
+                        }
+                        countLeading -= 1
+                    }
+                }
+            } else if (symbol == '_') {
+                if (countLeading == 1) {// italic
+                    if (pointers.lastItalic_ != -1) {
+                        annotations.add(TextAnnotationType.END_ITALIC to "")
+                        pointers.lastItalic_ = -1
+                        if (pointers.lastItalicStar != -1) {
+                            annotations[pointers.lastItalicStar] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
+                            pointers.lastItalicStar = -1
+                        }
+                        countLeading -= 1
+                    }
+                } else if (countLeading == 2) {// bold
+                    if (pointers.lastBold_ != -1) {
+                        annotations.add(TextAnnotationType.END_BOLD to "")
+                        pointers.lastBold_ = -1
+                        if (pointers.lastBoldStar != -1) {
+                            annotations[pointers.lastBoldStar] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
+                            pointers.lastBoldStar = -1
+                        }
+                        countLeading -= 2
+                    }
+                } else {// FIXME: symbols may differ
+                    if (pointers.lastBold_ != -1) {
+                        annotations.add(TextAnnotationType.END_BOLD to "")
+                        pointers.lastBold_ = -1
+                        if (pointers.lastBoldStar != -1) {
+                            annotations[pointers.lastBoldStar] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
+                            pointers.lastBoldStar = -1
+                        }
+                        countLeading -= 2
+                    }
+                    if (pointers.lastItalic_ != -1) {
+                        annotations.add(TextAnnotationType.END_ITALIC to "")
+                        pointers.lastItalic_ = -1
+                        if (pointers.lastItalicStar != -1) {
+                            annotations[pointers.lastItalicStar] =
+                                TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
+                            pointers.lastItalicStar = -1
+                        }
+                        countLeading -= 1
+                    }
+                }
+            } else if (countLeading >= 2) {// ~
+                if (pointers.lastStrikethrough != -1) {
+                    annotations.add(TextAnnotationType.END_STRIKETHROUGH to "")
+                    pointers.lastStrikethrough = -1
+                    countLeading -= 2
+                }
+            }
+            changePreviousAnnotation("$symbol".repeat(countLeading))
+        }
+    }
+}
+
 enum class Context(isText: Boolean) {
     NONE(false),
     TEXT(true),
@@ -385,4 +804,135 @@ enum class Context(isText: Boolean) {
     DIVIDER(false),
     TABLE(false),
     CODE_BLOCK(false),
+}
+
+enum class TextAnnotationType {
+    TEXT,
+    BEGIN_CODE,
+    END_CODE,
+    BEGIN_STRIKETHROUGH,
+    END_STRIKETHROUGH,
+    BEGIN_ITALIC,
+    END_ITALIC,
+    BEGIN_BOLD,
+    END_BOLD,
+    BEGIN_LINK,
+    END_LINK,
+    BEGIN_PIC,
+}
+
+@Composable
+fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): AnnotatedString {
+    val builder = AnnotatedString.Builder()
+    builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface))
+    val active = mutableSetOf<TextAnnotationType>() // currently active styles
+
+    annotations.forEach { annotation ->
+        val type = annotation.first
+        val value = annotation.second
+        when (type) {
+            TextAnnotationType.TEXT -> {
+                val start = builder.length
+                builder.append(
+                    text =
+                        if (active.contains(TextAnnotationType.BEGIN_CODE))
+                            value.replace(" \n", " ").replace('\n', ' ')
+                        else
+                            value
+                )
+                val end = builder.length
+
+                // apply all currently active styles to this chunk
+                active.forEach { style ->
+                    when (style) {
+                        TextAnnotationType.BEGIN_CODE -> {
+                            builder.addStyle(
+                                SpanStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    background = MaterialTheme.colorScheme.surfaceBright,
+                                ),
+                                start, end
+                            )
+                        }
+
+                        TextAnnotationType.BEGIN_STRIKETHROUGH -> {
+                            builder.addStyle(
+                                SpanStyle(textDecoration = TextDecoration.LineThrough),
+                                start, end
+                            )
+                        }
+
+                        TextAnnotationType.BEGIN_ITALIC -> {
+                            builder.addStyle(
+                                SpanStyle(fontStyle = FontStyle.Italic),
+                                start, end
+                            )
+                        }
+
+                        TextAnnotationType.BEGIN_BOLD -> {
+                            builder.addStyle(
+                                SpanStyle(fontWeight = FontWeight.Bold),
+                                start, end
+                            )
+                        }
+
+                        TextAnnotationType.BEGIN_LINK -> {
+                            // You can style it visually
+                            builder.addStyle(
+                                SpanStyle(
+                                    color = Color(0xFF1E88E5),
+                                    textDecoration = TextDecoration.Underline
+                                ),
+                                start, end
+                            )
+                            // And also attach the URL as a StringAnnotation
+                            builder.addStringAnnotation(
+                                tag = "URL",
+                                annotation = value,
+                                start = start,
+                                end = end
+                            )
+                        }
+
+                        TextAnnotationType.BEGIN_PIC -> {
+                            // For images, AnnotatedString alone won’t render them.
+                            // You need `appendInlineContent` + `inlineContent` in your Text composable.
+                            // Here we just mark a placeholder.
+                            builder.addStringAnnotation(
+                                tag = "PIC",
+                                annotation = value,
+                                start = start,
+                                end = end
+                            )
+                        }
+
+                        else -> Unit // unreachable cases are ignored
+                    }
+                }
+            }
+
+            TextAnnotationType.BEGIN_CODE -> active.add(TextAnnotationType.BEGIN_CODE)
+            TextAnnotationType.END_CODE -> active.remove(TextAnnotationType.BEGIN_CODE)
+
+            TextAnnotationType.BEGIN_STRIKETHROUGH -> active.add(TextAnnotationType.BEGIN_STRIKETHROUGH)
+            TextAnnotationType.END_STRIKETHROUGH -> active.remove(TextAnnotationType.BEGIN_STRIKETHROUGH)
+
+            TextAnnotationType.BEGIN_ITALIC -> active.add(TextAnnotationType.BEGIN_ITALIC)
+            TextAnnotationType.END_ITALIC -> active.remove(TextAnnotationType.BEGIN_ITALIC)
+
+            TextAnnotationType.BEGIN_BOLD -> active.add(TextAnnotationType.BEGIN_BOLD)
+            TextAnnotationType.END_BOLD -> active.remove(TextAnnotationType.BEGIN_BOLD)
+
+            TextAnnotationType.BEGIN_LINK -> active.add(TextAnnotationType.BEGIN_LINK)
+            TextAnnotationType.END_LINK -> {
+                active.remove(TextAnnotationType.BEGIN_LINK)
+                active.remove(TextAnnotationType.BEGIN_PIC)
+            }
+
+            TextAnnotationType.BEGIN_PIC -> active.add(TextAnnotationType.BEGIN_PIC)
+            // no explicit END_PIC? same handling as END_LINK if you want
+        }
+    }
+
+    return builder.toAnnotatedString()
 }
