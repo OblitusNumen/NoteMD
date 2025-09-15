@@ -1,10 +1,7 @@
 package oblitusnumen.notemd.ui.model
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
 import oblitusnumen.notemd.impl.ViewType
+import oblitusnumen.notemd.impl.conditional
 import oblitusnumen.notemd.ui.MarkdownView
 
 class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
@@ -28,14 +26,15 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
     @Composable
     fun Compose(modifier: Modifier = Modifier) {
         hack
+        val viewType = mdFile.viewType
         Column(
-            modifier = modifier.fillMaxSize()
+            modifier = modifier.fillMaxSize().conditional(viewType == ViewType.SOURCE) { imePadding() }
         ) {
             remember { content }
-            val viewType = mdFile.viewType
             val previewScroll = rememberScrollState()
             val md = viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.MD
-            Box((if (md) Modifier.weight(1f) else Modifier)
+            Box(
+                (if (md) Modifier.weight(1f) else Modifier)
                     .verticalScroll(previewScroll)
             ) {
                 if (md) {
