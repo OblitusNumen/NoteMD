@@ -17,47 +17,58 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.sp
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
+import oblitusnumen.notemd.impl.ViewType
 import oblitusnumen.notemd.ui.MarkdownView
 
 class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
     var content by mutableStateOf(TextFieldValue(mdFile.content))
+    var hack by mutableStateOf(false)
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     fun Compose(modifier: Modifier = Modifier) {
+        hack
         Column(
             modifier = modifier.fillMaxSize()
         ) {
             remember { content }
+            val viewType = mdFile.viewType
             val previewScroll = rememberScrollState()
-            Box(
-                Modifier
-                    .weight(1f)
+            val md = viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.MD
+            Box((if (md) Modifier.weight(1f) else Modifier)
                     .verticalScroll(previewScroll)
             ) {
-                MarkdownView(markdown = content.text, appContext = dataManager.context)
+                if (md) {
+                    MarkdownView(markdown = content.text, appContext = dataManager.context)
+                }
             }
 
             HorizontalDivider()
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                TextField(
-                    value = content,
-                    onValueChange = { newValue ->
-                        // TODO: undo history
-                        content = newValue
-                        mdFile.content = content.text
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp),
+            if (viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.SOURCE) {
+                Box(
                     modifier = Modifier
-                        .fillMaxSize(),
-                    singleLine = false,
-                    maxLines = Int.MAX_VALUE,
-                )
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    TextField(
+                        value = content,
+                        onValueChange = { newValue ->
+                            // TODO: undo history
+                            content = newValue
+                            mdFile.content = content.text
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp),
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        singleLine = false,
+                        maxLines = Int.MAX_VALUE,
+                    )
+                }
+            }
+
+            if (viewType == ViewType.CHAT) {
+                // TODO: ViewType.CHAT
             }
         }
     }
@@ -97,9 +108,52 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                         contentDescription = null
                     )
                 }
+
+                DropdownMenu(
+                    expanded = settingsDialogShown,
+                    onDismissRequest = { settingsDialogShown = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("MD View") },
+                        onClick = {
+                            mdFile.viewType = ViewType.MD
+                            settingsDialogShown = false
+                            hack = !hack
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Source View") },
+                        onClick = {
+                            mdFile.viewType = ViewType.SOURCE
+                            settingsDialogShown = false
+                            hack = !hack
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("MD with Source View") },
+                        onClick = {
+                            mdFile.viewType = ViewType.MD_WITH_SOURCE
+                            settingsDialogShown = false
+                            hack = !hack
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Chat View") },
+                        onClick = {
+                            mdFile.viewType = ViewType.CHAT
+                            settingsDialogShown = false
+                            hack = !hack
+                        }
+                    )
+                }
             }
         )
 //        if (settingsDialogShown)
-//            showSettingsDialog { settingsDialogShown = false }
+//            ShowSettingsDialog { settingsDialogShown = false }
     }
+
+//    @Composable
+//    private fun ShowSettingsDialog(onClose: () -> Unit) {
+//
+//    }
 }
