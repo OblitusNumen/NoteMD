@@ -58,53 +58,32 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                             val annotations = mutableListOf<Pair<TextAnnotationType, String>>()
                             val pointers = Pointers()
                             while (text.isNotEmpty()) {
-                                val splitResult = splitBacktickSequence(text)
-                                var newCurrent = splitResult.before
-                                while (true) {
-                                    val result = removeFirstMarkdownLink(newCurrent)
-                                    newCurrent = result.around
-                                    val index = result.index
-                                    val link = result.linkSequence
-                                    if (index == null) {
-                                        parseText(annotations, newCurrent, pointers)
-                                        break
-                                    }
-                                    val isPic = index != 0 && newCurrent[index - 1] == '!'
-                                    var part: String
-                                    if (isPic) {
-                                        part = newCurrent.substring(0, index - 1)
-                                    } else {
-                                        part = newCurrent.substring(0, index)
-                                    }
-
-                                    // parse text before link
-                                    parseText(annotations, part, pointers)
-
-                                    val linkIndex = link!!.lastIndexOf("](")
-                                    annotations.add(
-                                        (
-                                                if (isPic)
-                                                    TextAnnotationType.BEGIN_PIC
-                                                else
-                                                    TextAnnotationType.BEGIN_LINK
-                                                ) to link.substring(linkIndex + 2, link.length - 1)
-                                    )
-                                    val linkText = link.substring(1, linkIndex)
-
-                                    // parse link text
-                                    parseTextWithCode(annotations, linkText, pointers)
-
-                                    annotations.add(TextAnnotationType.END_LINK to "")
-                                    newCurrent = newCurrent.substring(index)
-                                }
-                                if (splitResult.inside == null)
+                                val codeInsertSearchResult = splitBacktickSequence(text)
+                                val linkSearchResult = parseMarkdownLink(text)
+                                if (linkSearchResult.before.length == codeInsertSearchResult.before.length) {
+                                    // no links, no backticks
+                                    parseText(annotations, text, pointers)
                                     break
-                                annotations.add(TextAnnotationType.BEGIN_CODE to "")
-                                annotations.add(
-                                    TextAnnotationType.TEXT to splitResult.inside.replace(" \n", " ").replace('\n', ' ')
-                                )
-                                annotations.add(TextAnnotationType.END_CODE to "")
-                                text = splitResult.after
+                                }
+                                if (linkSearchResult.before < codeInsertSearchResult.before) {
+                                    // link is before code
+                                    // parse text before link
+                                    parseText(annotations, linkSearchResult.before, pointers)
+                                    annotations.add((if (linkSearchResult.isPic!!) TextAnnotationType.BEGIN_PIC else TextAnnotationType.BEGIN_LINK) to linkSearchResult.link)
+                                    // parse link text
+                                    parseTextWithCode(annotations, linkSearchResult.linkText, pointers)
+                                    annotations.add(TextAnnotationType.END_LINK to "")
+                                    text = linkSearchResult.after
+                                } else {
+                                    // code is before link
+                                    parseText(annotations, codeInsertSearchResult.before, pointers)
+                                    annotations.add(TextAnnotationType.BEGIN_CODE to "")
+                                    annotations.add(
+                                        TextAnnotationType.TEXT to codeInsertSearchResult.inside!!.replace('\n', ' ').replace("  ", " ")
+                                    )
+                                    annotations.add(TextAnnotationType.END_CODE to "")
+                                    text = codeInsertSearchResult.after
+                                }
                             }
                             if (pointers.lastStrikethrough != -1) {
                                 annotations[pointers.lastStrikethrough] =
@@ -507,7 +486,7 @@ fun parseTextWithCode(annotations: MutableList<Pair<TextAnnotationType, String>>
             break
         annotations.add(TextAnnotationType.BEGIN_CODE to "")
         annotations.add(
-            TextAnnotationType.TEXT to splitResult.inside.replace(" \n", " ").replace('\n', ' ')
+            TextAnnotationType.TEXT to splitResult.inside.replace('\n', ' ').replace("  ", " ")
         )
         annotations.add(TextAnnotationType.END_CODE to "")
         part = splitResult.after
@@ -888,7 +867,6 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
             }
 
             TextAnnotationType.BEGIN_PIC -> active.add(TextAnnotationType.BEGIN_PIC)
-            // no explicit END_PIC? same handling as END_LINK if you want
         }
     }
 

@@ -15,24 +15,26 @@ fun String.addLeadingSpaces(count: Int): String = " ".repeat(count) + this
 fun String.countTrailing(char: Char): Int = this.reversed().takeWhile { it == char }.length
 
 data class LinkSplitResult(
-    val around: String,
-    val index: Int?,
-    val linkSequence: String?
+    val before: String,
+    val isPic: Boolean?,
+    val linkText: String,
+    val link: String,
+    val after: String
 )
 
-fun removeFirstMarkdownLink(input: String): LinkSplitResult {
+fun parseMarkdownLink(input: String): LinkSplitResult {
     // Regex to match [text](text)
-    val regex = Regex("""\[[^\]]*]\([^)]*\)""")
+    val regex = Regex("""(.*?)(!)?\[([^]]+]\([^)]+)\)(.*)""", setOf(RegexOption.DOT_MATCHES_ALL))
 
-    val match = regex.find(input)
-    return if (match != null) {
-        val newString = input.removeRange(match.range)
-        // return Triple of (newString, index, matched text)
-        LinkSplitResult(newString, match.range.first, match.value)
-    } else {
-        // no match found
-        LinkSplitResult(input, null, null)
-    }
+    val match = regex.find(input) ?: return LinkSplitResult(input, null, "", "", "")
+
+    val (a, before, pic, link, after) = match.groupValues
+    val linkIndex = link.lastIndexOf("](")
+    return LinkSplitResult(
+        before,
+        pic.isNotEmpty(),
+        link.substring(0, linkIndex),
+        link.substring(linkIndex + 2), after)
 }
 
 fun getTrailingSymbols(input: String): String {
