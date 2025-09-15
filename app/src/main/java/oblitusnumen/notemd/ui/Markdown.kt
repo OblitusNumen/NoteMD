@@ -49,72 +49,22 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                     Context.NONE -> throw RuntimeException("unreachable")
                     Context.TEXT -> {
                         {
-                            val text = cacheC
+                            var text = cacheC
                                 .replace("  \n", "\n\n")
                                 .normalizeWhitespaces()
                                 .replace(" \n", "\n")
                                 .replace('\n', ' ')
                                 .replace("  ", " \n")
                             val annotations = mutableListOf<Pair<TextAnnotationType, String>>()
-                            val strings = text.split('`')
-                            var isCode = false
-                            var lastCode = -1
                             val pointers = Pointers()
-                            repeat(strings.size) {
-                                val current = strings[it]
-                                if (current.isEmpty()) {
-                                    val lastAnnotation = annotations.lastOrNull()
-                                    if (lastAnnotation != null) {
-                                        if (!isCode) {// ` `|`
-                                            if (it == strings.lastIndex) {
-                                                annotations.add(TextAnnotationType.END_CODE to "`")
-                                            } else {
-                                                isCode = true
-                                                annotations[annotations.size - 1] =
-                                                    TextAnnotationType.TEXT to lastAnnotation.second + "`"
-                                            }
-                                        } else {
-                                            val text = lastAnnotation.second
-                                            if (lastAnnotation.first == TextAnnotationType.BEGIN_CODE) {
-                                                annotations[annotations.size - 1] = TextAnnotationType.TEXT to "``"
-                                            } else if (lastAnnotation.first == TextAnnotationType.TEXT && text.lastOrNull() == '`') {
-                                                annotations[annotations.size - 1] = TextAnnotationType.TEXT to "$text`"
-                                            }
-                                        }
-                                    } else if (isCode) {
-                                        annotations.add(TextAnnotationType.TEXT to "``")
-                                        isCode = false
-                                    } else
-                                        isCode = true
-                                    return@repeat
-                                }
-                                if (isCode) {
-                                    val lastAnnotation = annotations.lastOrNull()
-                                    if (lastAnnotation != null && lastAnnotation.second.lastOrNull() == '`') {
-                                        annotations[annotations.size - 1] =
-                                            TextAnnotationType.TEXT to lastAnnotation.second + "`"
-                                    } else {
-                                        annotations.add(TextAnnotationType.BEGIN_CODE to "`")
-                                    }
-                                    lastCode = annotations.size - 1
-                                    annotations.add(
-                                        TextAnnotationType.TEXT to current
-                                    )
-                                    isCode = false
-                                    return@repeat
-                                }
-                                isCode = true
-                                if (lastCode != -1) {
-                                    lastCode = -1
-                                    annotations.add(TextAnnotationType.END_CODE to "")
-                                }
-                                var newCurrent = current
+                            while (text.isNotEmpty()) {
+                                val splitResult = splitBacktickSequence(text)
+                                var newCurrent = splitResult.before
                                 while (true) {
-                                    // FIXME: this makes nested links possible
                                     val result = removeFirstMarkdownLink(newCurrent)
-                                    newCurrent = result.first
-                                    val index = result.second
-                                    val link = result.third
+                                    newCurrent = result.around
+                                    val index = result.index
+                                    val link = result.linkSequence
                                     if (index == null) {
                                         parseText(annotations, newCurrent, pointers)
                                         break
@@ -127,7 +77,6 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                                         part = newCurrent.substring(0, index)
                                     }
 
-                                    // FIXME: code insert may be inside link text
                                     // parse text before link
                                     parseText(annotations, part, pointers)
 
@@ -143,20 +92,19 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                                     val linkText = link.substring(1, linkIndex)
 
                                     // parse link text
-                                    parseText(annotations, linkText, pointers)
+                                    parseTextWithCode(annotations, linkText, pointers)
 
                                     annotations.add(TextAnnotationType.END_LINK to "")
                                     newCurrent = newCurrent.substring(index)
                                 }
-                            }
-                            if (lastCode != -1) {
-                                annotations[lastCode] = TextAnnotationType.TEXT to annotations[lastCode].second
-                                lastCode = -1
-                                val removeLastOrNull = annotations.removeLastOrNull()
-                                if (removeLastOrNull != null) {
-                                    val text = removeLastOrNull.second
-                                    parseText(annotations, text, pointers)
-                                }
+                                if (splitResult.inside == null)
+                                    break
+                                annotations.add(TextAnnotationType.BEGIN_CODE to "")
+                                annotations.add(
+                                    TextAnnotationType.TEXT to splitResult.inside.replace(" \n", " ").replace('\n', ' ')
+                                )
+                                annotations.add(TextAnnotationType.END_CODE to "")
+                                text = splitResult.after
                             }
                             if (pointers.lastStrikethrough != -1) {
                                 annotations[pointers.lastStrikethrough] =
@@ -550,8 +498,24 @@ class Pointers {
     var lastBoldStar = -1
 }
 
-fun parseText(annotations: MutableList<Pair<TextAnnotationType, String>>, part: String, pointers: Pointers) {
-    val words = part.split(' ')
+fun parseTextWithCode(annotations: MutableList<Pair<TextAnnotationType, String>>, text: String, pointers: Pointers) {
+    var part = text
+    while (text.isNotEmpty()) {
+        val splitResult = splitBacktickSequence(part)
+        parseText(annotations, splitResult.before, pointers)
+        if (splitResult.inside == null)
+            break
+        annotations.add(TextAnnotationType.BEGIN_CODE to "")
+        annotations.add(
+            TextAnnotationType.TEXT to splitResult.inside.replace(" \n", " ").replace('\n', ' ')
+        )
+        annotations.add(TextAnnotationType.END_CODE to "")
+        part = splitResult.after
+    }
+}
+
+fun parseText(annotations: MutableList<Pair<TextAnnotationType, String>>, text: String, pointers: Pointers) {
+    val words = text.split(' ')
     val changePreviousAnnotation = { text: String ->
         val lastAnnotation = annotations.lastOrNull()
         if (lastAnnotation != null && lastAnnotation.first == TextAnnotationType.TEXT) {
@@ -833,13 +797,7 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
         when (type) {
             TextAnnotationType.TEXT -> {
                 val start = builder.length
-                builder.append(
-                    text =
-                        if (active.contains(TextAnnotationType.BEGIN_CODE))
-                            value.replace(" \n", " ").replace('\n', ' ')
-                        else
-                            value
-                )
+                builder.append(text = value)
                 val end = builder.length
 
                 // apply all currently active styles to this chunk
