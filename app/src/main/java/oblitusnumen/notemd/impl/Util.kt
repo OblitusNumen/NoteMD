@@ -1,5 +1,21 @@
 package oblitusnumen.notemd.impl
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
 fun String.countLeadingWhitespaces(): Int = this.takeWhile { it.isWhitespace() }.length
 
 fun String.countLeading(char: Char): Int = this.takeWhile { it == char }.length
@@ -34,7 +50,8 @@ fun parseMarkdownLink(input: String): LinkSplitResult {
         before,
         pic.isNotEmpty(),
         link.substring(0, linkIndex),
-        link.substring(linkIndex + 2), after)
+        link.substring(linkIndex + 2), after
+    )
 }
 
 fun getTrailingSymbols(input: String): String {
@@ -63,4 +80,60 @@ fun splitBacktickSequence(input: String): BacktickSplitResult {
     val after = input.substring(match.range.last + 1)
 
     return BacktickSplitResult(before, inside, after)
+}
+
+fun Modifier.leftSideColor(color: Color, width: Dp) = this.then(
+    Modifier.drawBehind {
+        val stripWidth = width.toPx()
+        drawRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(0f, 0f),
+            size = androidx.compose.ui.geometry.Size(stripWidth, size.height)
+        )
+    }
+)
+
+@Composable
+fun Table(
+    headers: List<String>,
+    rows: List<List<String>>
+) {
+    Column(
+        modifier = Modifier
+            .border(1.dp, MaterialTheme.colorScheme.surfaceBright) // outer border
+    ) {
+        // Header row
+        Row(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.surfaceBright.copy(alpha = 0.5F)) // header background
+                .fillMaxWidth()
+        ) {
+            headers.forEach { header ->
+                Text(
+                    text = header,
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .weight(1f) // equal column width
+                        .border(0.5.dp, MaterialTheme.colorScheme.surfaceBright)
+                        .padding(8.dp)
+                )
+            }
+        }
+
+        // Data rows
+        rows.forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                row.forEach { cell ->
+                    Text(
+                        text = cell,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .border(0.5.dp, MaterialTheme.colorScheme.surfaceBright)
+                            .padding(8.dp)
+                    )
+                }
+            }
+        }
+    }
 }

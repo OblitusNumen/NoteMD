@@ -35,7 +35,7 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                     .weight(1f)
                     .verticalScroll(previewScroll)
             ) {
-                MarkdownView(markdown = content.text)
+                MarkdownView(markdown = content.text, appContext = dataManager.context)
             }
 
             HorizontalDivider()

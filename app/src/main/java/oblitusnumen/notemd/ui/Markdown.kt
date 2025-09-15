@@ -1,11 +1,16 @@
 package oblitusnumen.notemd.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.util.Log
+import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,10 +22,11 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import oblitusnumen.notemd.impl.*
 
 @Composable
-fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
+fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Context, markdown: String) {
     val blocks: MutableList<Pair<Context, @Composable () -> Unit>> = mutableListOf()
     val split = markdown.split('\n')
     var context: Context = Context.NONE
@@ -79,7 +85,8 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                                     parseText(annotations, codeInsertSearchResult.before, pointers)
                                     annotations.add(TextAnnotationType.BEGIN_CODE to "")
                                     annotations.add(
-                                        TextAnnotationType.TEXT to codeInsertSearchResult.inside!!.replace('\n', ' ').replace("  ", " ")
+                                        TextAnnotationType.TEXT to codeInsertSearchResult.inside!!.replace('\n', ' ')
+                                            .replace("  ", " ")
                                     )
                                     annotations.add(TextAnnotationType.END_CODE to "")
                                     text = codeInsertSearchResult.after
@@ -114,91 +121,162 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
                             // rendering
                             val annotated = buildAnnotated(annotations)
                             val uriHandler = LocalUriHandler.current
-                            Text(text = "text")
+                            Spacer(modifier = Modifier.height(10.dp))
                             ClickableText(
                                 text = annotated,
                                 onClick = { offset ->
                                     annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
                                         .firstOrNull()?.let { annotation ->
-                                            uriHandler.openUri(annotation.item)
+                                            try {
+                                                val intent =
+                                                    Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
+                                                appContext.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Log.e("BrowserIntent", "Error starting activity", e)
+                                                Toast.makeText(appContext, "Failed to open browser", Toast.LENGTH_SHORT)
+                                                    .show()
+                                            }
                                         }
                                     annotated.getStringAnnotations(tag = "PIC", start = offset, end = offset)
                                         .firstOrNull()?.let { annotation ->
-                                            uriHandler.openUri(annotation.item)
+                                            Toast.makeText(appContext, "Picture", Toast.LENGTH_SHORT)
+                                                .show()
+//                                            uriHandler.openUri(annotation.item)
                                         }
                                 },
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.HEADING -> {
                         {
-                            Text(text = "heading")
-                            Text(text = cacheC, style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                text = cacheC,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontSize = (20 + 5 * (6 - previousLevelC)).sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.QUOTE -> {
                         {
-                            Text(text = "quote")
-                            MarkdownView(markdown = cacheC)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Box(
+                                Modifier.background(color = MaterialTheme.colorScheme.surfaceBright.copy(alpha = 0.5F))
+                                    .fillMaxWidth()
+                                    .leftSideColor(Color.Cyan, 4.dp)
+                            ) {
+                                MarkdownView(
+                                    modifier = Modifier.padding(10.dp),
+                                    markdown = cacheC,
+                                    appContext = appContext
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.TEXT_BLOCK -> {
                         {
-                            Text(text = "text block")
-                            Text(text = cacheC, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Box(
+                                Modifier.background(
+                                    color = MaterialTheme.colorScheme.surfaceBright.copy(alpha = 0.5F),
+                                    shape = RoundedCornerShape(4.dp)
+                                ).fillMaxWidth()
+                            ) {
+                                Text(
+                                    modifier = Modifier.padding(10.dp),
+                                    text = cacheC,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.LIST_ELEMENT -> {
                         {
-                            Text(text = "list element")
-                            Row {
-                                Text(
-                                    text = "- $cacheC",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(start = (4 * previousLevelC).dp)
-                                )
-                            }
+                            Text(
+                                text = "- $cacheC",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = (16 * previousLevelC).dp)
+                            )
                         }
                     }
 
                     Context.SPACER -> {
                         {
-                            Text(text = "spacer")
-                            Spacer(Modifier.fillMaxWidth().height(16.dp))
+                            Spacer(Modifier.fillMaxWidth().height(10.dp))
                         }
                     }
 
                     Context.DIVIDER -> {
                         {
-                            Text(text = "divider")
                             HorizontalDivider(Modifier.padding(4.dp))
                         }
                     }
 
                     Context.TABLE -> {
                         {
-                            Text(text = "table")
+                            val rows = mutableListOf<List<String>>()
+                            var maxInRow = 0
                             cacheC.split('\n').forEach {
-                                Row {
-                                    for (string in it.trim().split('|')) {
-                                        Text(string, style = MaterialTheme.typography.bodyMedium)
-                                        VerticalDivider(modifier = Modifier.padding(4.dp))
-                                    }
+                                var row = it.trim()
+                                if (row.firstOrNull() == '|')
+                                    row = row.substring(1)
+                                if (row.lastOrNull() == '|')
+                                    row = row.substring(0, row.lastIndex)
+                                val cells = mutableListOf<String>()
+                                for (string in row.split('|')) {
+                                    cells.add(string.trim())
                                 }
-                                HorizontalDivider(Modifier.padding(4.dp))
+                                rows.add(cells)
+                                if (maxInRow < cells.size) {
+                                    maxInRow = cells.size
+                                }
                             }
+                            val header = rows.removeAt(0)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Table(header, rows)
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.CODE_BLOCK -> {
                         {
-                            Text(text = "code: $languageC")
-                            Text(text = cacheC, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Column(
+                                Modifier.background(
+                                    color = MaterialTheme.colorScheme.surfaceBright.copy(alpha = 0.5F),
+                                    shape = RoundedCornerShape(4.dp)
+                                ).fillMaxWidth()
+                            ) {
+                                Box(
+                                    Modifier.fillMaxWidth().background(
+                                        color = MaterialTheme.colorScheme.surfaceBright.copy(
+                                            alpha = 0.5F
+                                        ),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ).padding(5.dp)
+                                ) {
+                                    Text(
+                                        text = languageC,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                Text(
+                                    modifier = Modifier.padding(5.dp),
+                                    text = cacheC,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
                 }
@@ -392,6 +470,9 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
         }
 
         // table
+        // FIXME: it might be formatted like
+        // a|a
+        // -|-
         if (context != Context.TEXT && context != Context.LIST_ELEMENT// && context != Context.QUOTE
             && current.trimEnd().lastOrNull() == '|' && symbol == '|' && split.size >= index + 1
         ) {
@@ -457,7 +538,7 @@ fun MarkdownView(modifier: Modifier = Modifier, markdown: String) {
     pushBlock()
 
     // FIXME:  
-    Column(modifier) {
+    Column(modifier.padding(horizontal = 10.dp)) {
         blocks.forEach {
             it.second()
         }
@@ -769,6 +850,7 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
     val builder = AnnotatedString.Builder()
     builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface))
     val active = mutableSetOf<TextAnnotationType>() // currently active styles
+    var link = ""
 
     annotations.forEach { annotation ->
         val type = annotation.first
@@ -814,6 +896,7 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
                         }
 
                         TextAnnotationType.BEGIN_LINK -> {
+                            Log.v("log", "link:$link")
                             // You can style it visually
                             builder.addStyle(
                                 SpanStyle(
@@ -825,7 +908,7 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
                             // And also attach the URL as a StringAnnotation
                             builder.addStringAnnotation(
                                 tag = "URL",
-                                annotation = value,
+                                annotation = link,
                                 start = start,
                                 end = end
                             )
@@ -837,7 +920,7 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
                             // Here we just mark a placeholder.
                             builder.addStringAnnotation(
                                 tag = "PIC",
-                                annotation = value,
+                                annotation = link,
                                 start = start,
                                 end = end
                             )
@@ -860,13 +943,20 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
             TextAnnotationType.BEGIN_BOLD -> active.add(TextAnnotationType.BEGIN_BOLD)
             TextAnnotationType.END_BOLD -> active.remove(TextAnnotationType.BEGIN_BOLD)
 
-            TextAnnotationType.BEGIN_LINK -> active.add(TextAnnotationType.BEGIN_LINK)
+            TextAnnotationType.BEGIN_LINK -> {
+                active.add(TextAnnotationType.BEGIN_LINK)
+                link = value
+            }
+
             TextAnnotationType.END_LINK -> {
                 active.remove(TextAnnotationType.BEGIN_LINK)
                 active.remove(TextAnnotationType.BEGIN_PIC)
             }
 
-            TextAnnotationType.BEGIN_PIC -> active.add(TextAnnotationType.BEGIN_PIC)
+            TextAnnotationType.BEGIN_PIC -> {
+                active.add(TextAnnotationType.BEGIN_PIC)
+                link = value
+            }
         }
     }
 

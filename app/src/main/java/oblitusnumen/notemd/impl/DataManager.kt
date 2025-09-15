@@ -8,7 +8,7 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.attribute.BasicFileAttributes
 
-class DataManager(val context: Context) {
+class DataManager(public val context: Context) {
     val mdDir: File
 //    var config: Config = Config.ofString(getSharedPrefs(context).getString(CONFIG_PREF_NAME, "")!!)
 //        set(config) {
