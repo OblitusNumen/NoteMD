@@ -17,6 +17,46 @@
                 android:exported="true"
                 android:label="@string/app_name"
                 android:theme="@style/Theme.NoteMD">
+
+            <intent-filter>
+                    <action android:name="android.intent.action.VIEW" />
+                    <category android:name="android.intent.category.DEFAULT" />
+                    <category android:name="android.intent.category.BROWSABLE" />
+
+    <!-- content:// with any host -->
+    <data
+            android:scheme="content" android:mimeType="text/markdown"/>
+    <data android:scheme="content" android:pathPattern=".*\\.md"/>
+
+    <!-- optional: file:// fallback -->
+    <data android:scheme="file" android:pathPattern=".*\\.md"/>
+
+<!--    <category android:name="android.intent.category.DEFAULT"/>-->
+<!--    <category android:name="android.intent.category.BROWSABLE"/>-->
+<!--    <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.md"/>-->
+
+<!--    <action android:name="android.intent.action.VIEW" />-->
+<!--    <category android:name="android.intent.category.DEFAULT" />-->
+<!--    <category android:name="android.intent.category.BROWSABLE" />-->
+<!--    <data-->
+<!--            android:host="*"-->
+<!--            android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.md" />-->
+
+<!--    &lt;!&ndash; Telegram often uses this &ndash;&gt;-->
+<!--    <data android:scheme="content" />-->
+<!--    <data android:host="*" />-->
+<!--    <data android:scheme="content" />-->
+<!--    <data android:host="*" />-->
+<!--    <data android:pathPattern=".*\\.md" />-->
+
+<!--    &lt;!&ndash; For file managers and correct MIME types &ndash;&gt;-->
+<!--    <data android:mimeType="text/markdown" />-->
+<!--    <data android:mimeType="text/plain" />-->
+<!--    <data android:scheme="file" />-->
+<!--    <data android:host="*" />-->
+<!--    <data android:pathPattern=".*\\.md" />-->
+            </intent-filter>
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
 
