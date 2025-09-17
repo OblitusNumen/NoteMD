@@ -11,12 +11,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
 import oblitusnumen.notemd.impl.ViewType
 import oblitusnumen.notemd.impl.conditional
-import oblitusnumen.notemd.ui.MarkdownView
+import oblitusnumen.notemd.ui.parseMarkdown
 
 class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
     var content by mutableStateOf(TextFieldValue(mdFile.content))
@@ -33,12 +34,17 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
             remember { content }
             val previewScroll = rememberScrollState()
             val md = viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.MD
+            val markdownBlocks = remember(content) { parseMarkdown(appContext = dataManager.context, markdown = content.text) }
             Box(
                 (if (md) Modifier.weight(1f) else Modifier)
                     .verticalScroll(previewScroll)
             ) {
                 if (md) {
-                    MarkdownView(markdown = content.text, appContext = dataManager.context)
+                    Column(Modifier.padding(horizontal = 10.dp)) {
+                        markdownBlocks.forEach {
+                            it()
+                        }
+                    }
                 }
             }
 

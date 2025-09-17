@@ -2,12 +2,8 @@ package oblitusnumen.notemd.impl
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -95,8 +91,8 @@ fun Modifier.leftSideColor(color: Color, width: Dp) = this.then(
 
 @Composable
 fun Table(
-    headers: List<String>,
-    rows: List<List<String>>
+    headers: List<@Composable (() -> Unit)>,
+    rows: MutableList<List<@Composable (() -> Unit)>>
 ) {
     Column(
         modifier = Modifier
@@ -109,14 +105,14 @@ fun Table(
                 .fillMaxWidth()
         ) {
             headers.forEach { header ->
-                Text(
-                    text = header,
-                    fontSize = 16.sp,
+                Box(
                     modifier = Modifier
-                        .weight(1f) // equal column width
+                        .weight(1f)
                         .border(0.5.dp, MaterialTheme.colorScheme.surfaceBright)
                         .padding(8.dp)
-                )
+                ) {
+                    header()
+                }
             }
         }
 
@@ -124,14 +120,14 @@ fun Table(
         rows.forEach { row ->
             Row(modifier = Modifier.fillMaxWidth()) {
                 row.forEach { cell ->
-                    Text(
-                        text = cell,
-                        fontSize = 14.sp,
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .border(0.5.dp, MaterialTheme.colorScheme.surfaceBright)
                             .padding(8.dp)
-                    )
+                    ) {
+                        cell()
+                    }
                 }
             }
         }

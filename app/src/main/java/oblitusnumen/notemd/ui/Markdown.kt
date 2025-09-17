@@ -1,7 +1,6 @@
 package oblitusnumen.notemd.ui
 
 import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -16,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -23,10 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import oblitusnumen.notemd.impl.*
 
-@Composable
-fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Context, markdown: String) {
+fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@Composable () -> Unit> {
     val blocks: MutableList<Pair<Context, @Composable () -> Unit>> = mutableListOf()
     val split = markdown.split('\n')
     var context: Context = Context.NONE
@@ -35,7 +35,7 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
     var previousLevel: Int = -1
     var leadingWhitespace = 0
     var previousWhitespaces = 0
-    var previousSpace = 0
+    var previousSpace = 0 // space before the actual text (for nested blocks)
     var checkbox: Int = -1
     var language = ""
     val pushBlock = {
@@ -54,114 +54,42 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
                 when (context) {
                     Context.NONE -> throw RuntimeException("unreachable")
                     Context.TEXT -> {
+                        val annotations = generateTextAnnotations(cacheC);
                         {
-                            var text = cacheC
-                                .replace("  \n", "\n\n")
-                                .normalizeWhitespaces()
-                                .replace(" \n", "\n")
-                                .replace('\n', ' ')
-                                .replace("  ", " \n")
-                            val annotations = mutableListOf<Pair<TextAnnotationType, String>>()
-                            val pointers = Pointers()
-                            while (text.isNotEmpty()) {
-                                val codeInsertSearchResult = splitBacktickSequence(text)
-                                val linkSearchResult = parseMarkdownLink(text)
-                                if (linkSearchResult.before.length == codeInsertSearchResult.before.length) {
-                                    // no links, no backticks
-                                    parseText(annotations, text, pointers)
-                                    break
-                                }
-                                if (linkSearchResult.before < codeInsertSearchResult.before) {
-                                    // link is before code
-                                    // parse text before link
-                                    parseText(annotations, linkSearchResult.before, pointers)
-                                    annotations.add((if (linkSearchResult.isPic!!) TextAnnotationType.BEGIN_PIC else TextAnnotationType.BEGIN_LINK) to linkSearchResult.link)
-                                    // parse link text
-                                    parseTextWithCode(annotations, linkSearchResult.linkText, pointers)
-                                    annotations.add(TextAnnotationType.END_LINK to "")
-                                    text = linkSearchResult.after
-                                } else {
-                                    // code is before link
-                                    parseText(annotations, codeInsertSearchResult.before, pointers)
-                                    annotations.add(TextAnnotationType.BEGIN_CODE to "")
-                                    annotations.add(
-                                        TextAnnotationType.TEXT to codeInsertSearchResult.inside!!.replace('\n', ' ')
-                                            .replace("  ", " ")
-                                    )
-                                    annotations.add(TextAnnotationType.END_CODE to "")
-                                    text = codeInsertSearchResult.after
-                                }
-                            }
-                            if (pointers.lastStrikethrough != -1) {
-                                annotations[pointers.lastStrikethrough] =
-                                    TextAnnotationType.TEXT to annotations[pointers.lastStrikethrough].second
-                                pointers.lastStrikethrough = -1
-                            }
-                            if (pointers.lastItalic_ != -1) {
-                                annotations[pointers.lastItalic_] =
-                                    TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
-                                pointers.lastItalic_ = -1
-                            }
-                            if (pointers.lastItalicStar != -1) {
-                                annotations[pointers.lastItalicStar] =
-                                    TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
-                                pointers.lastItalicStar = -1
-                            }
-                            if (pointers.lastBold_ != -1) {
-                                annotations[pointers.lastBold_] =
-                                    TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
-                                pointers.lastBold_ = -1
-                            }
-                            if (pointers.lastBoldStar != -1) {
-                                annotations[pointers.lastBoldStar] =
-                                    TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
-                                pointers.lastBoldStar = -1
-                            }
-
-                            // rendering
-                            val annotated = buildAnnotated(annotations)
-                            val uriHandler = LocalUriHandler.current
                             Spacer(modifier = Modifier.height(10.dp))
-                            ClickableText(
-                                text = annotated,
-                                onClick = { offset ->
-                                    annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                                        .firstOrNull()?.let { annotation ->
-                                            try {
-                                                val intent =
-                                                    Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
-                                                appContext.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Log.e("BrowserIntent", "Error starting activity", e)
-                                                Toast.makeText(appContext, "Failed to open browser", Toast.LENGTH_SHORT)
-                                                    .show()
-                                            }
-                                        }
-                                    annotated.getStringAnnotations(tag = "PIC", start = offset, end = offset)
-                                        .firstOrNull()?.let { annotation ->
-                                            Toast.makeText(appContext, "Picture", Toast.LENGTH_SHORT)
-                                                .show()
-//                                            uriHandler.openUri(annotation.item)
-                                        }
-                                },
-                                style = MaterialTheme.typography.bodyMedium
+                            RenderAnnotatedText(
+                                appContext,
+                                annotations,
+                                MaterialTheme.typography.bodyMedium.toParagraphStyle(),
+                                MaterialTheme.typography.bodyMedium.toSpanStyle()
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.HEADING -> {
+                        val textAnnotations = generateTextAnnotations(cacheC)
+                        val fontSize = (20 + 5 * (6 - previousLevelC))
                         {
-                            Text(
-                                text = cacheC,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontSize = (20 + 5 * (6 - previousLevelC)).sp
+                            Spacer(modifier = Modifier.height(20.dp))
+                            RenderAnnotatedText(
+                                appContext,
+                                textAnnotations,
+                                paragraphStyle = MaterialTheme.typography.headlineLarge.copy(
+                                    lineHeight = fontSize.sp,
+                                    fontSize = fontSize.sp
+                                ).toParagraphStyle(),
+                                spanStyle = MaterialTheme.typography.headlineLarge.copy(
+                                    lineHeight = fontSize.sp,
+                                    fontSize = fontSize.sp
+                                ).toSpanStyle()
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.QUOTE -> {
+                        val mdBlocks = parseMarkdown(markdown = cacheC, appContext = appContext);
                         {
                             Spacer(modifier = Modifier.height(10.dp))
                             Box(
@@ -169,11 +97,7 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
                                     .fillMaxWidth()
                                     .leftSideColor(Color.Cyan, 4.dp)
                             ) {
-                                MarkdownView(
-                                    modifier = Modifier.padding(10.dp),
-                                    markdown = cacheC,
-                                    appContext = appContext
-                                )
+                                RenderMarkdownBlocks(modifier = Modifier.padding(10.dp), mdBlocks)
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                         }
@@ -199,11 +123,11 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
                     }
 
                     Context.LIST_ELEMENT -> {
+                        val mdBlocks = parseMarkdown(markdown = cacheC, appContext = appContext);
                         {
-                            Text(
-                                text = "- $cacheC",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(start = (16 * previousLevelC).dp)
+                            RenderMarkdownBlocks(
+                                modifier = Modifier.padding(start = (16 * previousLevelC).dp),
+                                mdBlocks
                             )
                         }
                     }
@@ -221,25 +145,26 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
                     }
 
                     Context.TABLE -> {
-                        {
-                            val rows = mutableListOf<List<String>>()
-                            var maxInRow = 0
-                            cacheC.split('\n').forEach {
-                                var row = it.trim()
-                                if (row.firstOrNull() == '|')
-                                    row = row.substring(1)
-                                if (row.lastOrNull() == '|')
-                                    row = row.substring(0, row.lastIndex)
-                                val cells = mutableListOf<String>()
-                                for (string in row.split('|')) {
-                                    cells.add(string.trim())
-                                }
-                                rows.add(cells)
-                                if (maxInRow < cells.size) {
-                                    maxInRow = cells.size
-                                }
+                        val rows = mutableListOf<List<@Composable () -> Unit>>()
+                        var maxInRow = 0
+                        cacheC.split('\n').forEach {
+                            var row = it.trim()
+                            if (row.firstOrNull() == '|')
+                                row = row.substring(1)
+                            if (row.lastOrNull() == '|')
+                                row = row.substring(0, row.lastIndex)
+                            val cells: MutableList<@Composable () -> Unit> = mutableListOf()
+                            for (string in row.split('|')) {
+                                val textAnnotations = generateTextAnnotations(string.trim())
+                                cells.add({ RenderAnnotatedText(appContext, textAnnotations) })
                             }
-                            val header = rows.removeAt(0)
+                            rows.add(cells)
+                            if (maxInRow < cells.size) {
+                                maxInRow = cells.size
+                            }
+                        }
+                        val header = rows.removeAt(0);
+                        {
                             Spacer(modifier = Modifier.height(10.dp))
                             Table(header, rows)
                             Spacer(modifier = Modifier.height(10.dp))
@@ -255,11 +180,9 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
                                     shape = RoundedCornerShape(4.dp)
                                 ).fillMaxWidth()
                             ) {
-                                Box(
+                                Row(
                                     Modifier.fillMaxWidth().background(
-                                        color = MaterialTheme.colorScheme.surfaceBright.copy(
-                                            alpha = 0.5F
-                                        ),
+                                        color = MaterialTheme.colorScheme.surfaceBright,
                                         shape = RoundedCornerShape(4.dp)
                                     ).padding(5.dp)
                                 ) {
@@ -268,6 +191,7 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontFamily = FontFamily.Monospace
                                     )
+                                    // TODO: copy button
                                 }
                                 Text(
                                     modifier = Modifier.padding(5.dp),
@@ -312,17 +236,17 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
 
         // trim
         leadingWhitespace = current.countLeadingWhitespaces()
-        current = current.trimLeadingWhitespaces()
+        current = current.trimLeadingWhitespaces() // FIXME: might be not efficient
         if (current.trim().isEmpty()) {
             pushBlock()
             return@repeat
         }
 
         // todo numbered, checklist
-        // bullet list
+        // bullet list start
         val symbol = current.firstOrNull()
-        if (symbol == '+' || symbol == '-' || symbol == '*') {// -|
-            var currentForList = current.substring(1)// "     [ ] text"
+        if (symbol == '+' || symbol == '-' || symbol == '*') {
+            var currentForList = current.substring(1)// |- "     [ ] text"| _OR_ |- "     text"|
             var listWhitespaces = currentForList.countLeadingWhitespaces()
             var curSpace = leadingWhitespace + 2
             val checkChecklist = currentForList.substring(listWhitespaces)// "[ ] text"
@@ -413,12 +337,20 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
             return@repeat
         }
 
+        // list
+        if (context == Context.LIST_ELEMENT) {
+            if (leadingWhitespace - previousSpace > 0)
+                current.addLeadingSpaces(leadingWhitespace - previousSpace)
+            cache += "\n" + current
+            return@repeat
+        }
+
         // text block
         if (leadingWhitespace >= 4) {
             if (context == Context.TEXT_BLOCK) {
                 cache += "\n" + current.addLeadingSpaces(leadingWhitespace - 4)
                 return@repeat
-            } else if (context != Context.TEXT/* && context != Context.QUOTE*/) {
+            } else if (context != Context.TEXT) {
                 pushBlock()
                 context = Context.TEXT_BLOCK
                 cache += current.addLeadingSpaces(leadingWhitespace - 4)
@@ -536,11 +468,15 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
         cache += "\n" + current
     }
     pushBlock()
+    return blocks.map { it.second }
+}
 
-    // FIXME:  
+@Composable
+fun RenderMarkdownBlocks(modifier: Modifier = Modifier, markdownBlocks: List<@Composable (() -> Unit)>) {
+    // FIXME:
     Column(modifier.padding(horizontal = 10.dp)) {
-        blocks.forEach {
-            it.second()
+        markdownBlocks.forEach {
+            it()
         }
     }
 //    LazyColumn(modifier) {
@@ -550,12 +486,83 @@ fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Cont
 //    }
 }
 
+@Composable
+fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Context, markdown: String) {
+    RenderMarkdownBlocks(modifier, parseMarkdown(appContext, markdown))
+}
+
 class Pointers {
     var lastStrikethrough = -1
     var lastItalic_ = -1
     var lastItalicStar = -1
     var lastBold_ = -1
     var lastBoldStar = -1
+}
+
+fun generateTextAnnotations(text: String): List<Pair<TextAnnotationType, String>> {
+    var text = text
+        .replace("  \n", "\n\n")
+        .normalizeWhitespaces()
+        .replace(" \n", "\n")
+        .replace('\n', ' ')
+        .replace("  ", " \n")
+    val annotations = mutableListOf<Pair<TextAnnotationType, String>>()
+    val pointers = Pointers()
+    while (text.isNotEmpty()) {
+        val codeInsertSearchResult = splitBacktickSequence(text)
+        val linkSearchResult = parseMarkdownLink(text)
+        if (linkSearchResult.before.length == codeInsertSearchResult.before.length) {
+            // no links, no backticks
+            parseText(annotations, text, pointers)
+            break
+        }
+        if (linkSearchResult.before < codeInsertSearchResult.before) {
+            // link is before code
+            // parse text before link
+            parseText(annotations, linkSearchResult.before, pointers)
+            annotations.add((if (linkSearchResult.isPic!!) TextAnnotationType.BEGIN_PIC else TextAnnotationType.BEGIN_LINK) to linkSearchResult.link)
+            // parse link text
+            parseTextWithCode(annotations, linkSearchResult.linkText, pointers)
+            annotations.add(TextAnnotationType.END_LINK to "")
+            text = linkSearchResult.after
+        } else {
+            // code is before link
+            parseText(annotations, codeInsertSearchResult.before, pointers)
+            annotations.add(TextAnnotationType.BEGIN_CODE to "")
+            annotations.add(
+                TextAnnotationType.TEXT to codeInsertSearchResult.inside!!.replace('\n', ' ')
+                    .replace("  ", " ")
+            )
+            annotations.add(TextAnnotationType.END_CODE to "")
+            text = codeInsertSearchResult.after
+        }
+    }
+    if (pointers.lastStrikethrough != -1) {
+        annotations[pointers.lastStrikethrough] =
+            TextAnnotationType.TEXT to annotations[pointers.lastStrikethrough].second
+        pointers.lastStrikethrough = -1
+    }
+    if (pointers.lastItalic_ != -1) {
+        annotations[pointers.lastItalic_] =
+            TextAnnotationType.TEXT to annotations[pointers.lastItalic_].second
+        pointers.lastItalic_ = -1
+    }
+    if (pointers.lastItalicStar != -1) {
+        annotations[pointers.lastItalicStar] =
+            TextAnnotationType.TEXT to annotations[pointers.lastItalicStar].second
+        pointers.lastItalicStar = -1
+    }
+    if (pointers.lastBold_ != -1) {
+        annotations[pointers.lastBold_] =
+            TextAnnotationType.TEXT to annotations[pointers.lastBold_].second
+        pointers.lastBold_ = -1
+    }
+    if (pointers.lastBoldStar != -1) {
+        annotations[pointers.lastBoldStar] =
+            TextAnnotationType.TEXT to annotations[pointers.lastBoldStar].second
+        pointers.lastBoldStar = -1
+    }
+    return annotations
 }
 
 fun parseTextWithCode(annotations: MutableList<Pair<TextAnnotationType, String>>, text: String, pointers: Pointers) {
@@ -846,9 +853,19 @@ enum class TextAnnotationType {
 }
 
 @Composable
-fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): AnnotatedString {
+fun buildAnnotated(
+    annotations: List<Pair<TextAnnotationType, String>>,
+    paragraphStyle: ParagraphStyle?,
+    spanStyle: SpanStyle?
+): AnnotatedString {
     val builder = AnnotatedString.Builder()
     builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface))
+    if (paragraphStyle != null) {
+        builder.pushStyle(paragraphStyle)
+    }
+    if (spanStyle != null) {
+        builder.pushStyle(spanStyle)
+    }
     val active = mutableSetOf<TextAnnotationType>() // currently active styles
     var link = ""
 
@@ -872,6 +889,7 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
                                 ),
                                 start, end
                             )
+                            // TODO: copy on click
                         }
 
                         TextAnnotationType.BEGIN_STRIKETHROUGH -> {
@@ -961,4 +979,44 @@ fun buildAnnotated(annotations: List<Pair<TextAnnotationType, String>>): Annotat
     }
 
     return builder.toAnnotatedString()
+}
+
+@Composable
+fun RenderAnnotatedText(
+    appContext: android.content.Context,
+    annotations: List<Pair<TextAnnotationType, String>>,
+    paragraphStyle: ParagraphStyle? = null,
+    spanStyle: SpanStyle? = null,
+) {
+    val uriHandler = LocalUriHandler.current
+    val annotated = buildAnnotated(annotations, paragraphStyle, spanStyle)
+    ClickableText(
+        text = annotated,
+        onClick = { offset ->
+            annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    try {
+                        val intent =
+                            Intent(Intent.ACTION_VIEW, annotation.item.toUri())
+                        appContext.startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.e("BrowserIntent", "Error starting activity", e)
+                        Toast.makeText(
+                            appContext,
+                            "Failed to open browser",
+                            Toast.LENGTH_SHORT
+                        )
+                            .show()
+                    }
+                }
+            annotated.getStringAnnotations(tag = "PIC", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    // TODO: implement pictures (but rm onclick)
+                    Toast.makeText(appContext, "Picture", Toast.LENGTH_SHORT)
+                        .show()
+//                                            uriHandler.openUri(annotation.item)
+                }
+        },
+        style = MaterialTheme.typography.bodyMedium
+    )
 }
