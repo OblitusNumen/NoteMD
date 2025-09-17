@@ -1,16 +1,9 @@
 package oblitusnumen.notemd.impl
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 fun String.countLeadingWhitespaces(): Int = this.takeWhile { it.isWhitespace() }.length
 
@@ -88,57 +81,3 @@ fun Modifier.leftSideColor(color: Color, width: Dp) = this.then(
         )
     }
 )
-
-@Composable
-fun Table(
-    headers: List<@Composable (() -> Unit)>,
-    rows: MutableList<List<@Composable (() -> Unit)>>
-) {
-    Column(
-        modifier = Modifier
-            .border(1.dp, MaterialTheme.colorScheme.surfaceBright) // outer border
-    ) {
-        // Header row
-        Row(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.surfaceBright.copy(alpha = 0.5F)) // header background
-                .fillMaxWidth()
-        ) {
-            headers.forEach { header ->
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(0.5.dp, MaterialTheme.colorScheme.surfaceBright)
-                        .padding(8.dp)
-                ) {
-                    header()
-                }
-            }
-        }
-
-        // Data rows
-        rows.forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                row.forEach { cell ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .border(0.5.dp, MaterialTheme.colorScheme.surfaceBright)
-                            .padding(8.dp)
-                    ) {
-                        cell()
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun Modifier.conditional(condition: Boolean, modifier: @Composable Modifier.() -> Modifier): Modifier {
-    return if (condition) {
-        this.modifier()
-    } else {
-        this
-    }
-}

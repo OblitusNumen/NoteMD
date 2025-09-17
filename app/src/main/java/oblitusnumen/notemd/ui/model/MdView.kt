@@ -1,5 +1,8 @@
 package oblitusnumen.notemd.ui.model
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
 import oblitusnumen.notemd.impl.ViewType
-import oblitusnumen.notemd.impl.conditional
+import oblitusnumen.notemd.ui.conditional
 import oblitusnumen.notemd.ui.parseMarkdown
 
 class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
@@ -34,7 +37,8 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
             remember { content }
             val previewScroll = rememberScrollState()
             val md = viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.MD
-            val markdownBlocks = remember(content) { parseMarkdown(appContext = dataManager.context, markdown = content.text) }
+            val markdownBlocks =
+                remember(content) { parseMarkdown(appContext = dataManager.context, markdown = content.text) }
             Box(
                 (if (md) Modifier.weight(1f) else Modifier)
                     .verticalScroll(previewScroll)
@@ -114,6 +118,19 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                     )
                 }
 
+                val saveLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("text/markdown")
+                ) { uri: Uri? ->
+                    uri?.let {
+                        try {
+                            dataManager.context.contentResolver.openOutputStream(it)?.use { output ->
+                                output.write(content.text.toByteArray())
+                            }
+                        } catch (e: Exception) {
+                            dataManager.toast("Saving failed: ${e.message}")
+                        }
+                    }
+                }
                 DropdownMenu(
                     expanded = settingsDialogShown,
                     onDismissRequest = { settingsDialogShown = false }
@@ -150,15 +167,16 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                             hack = !hack
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Export File") },
+                        onClick = {
+                            saveLauncher.launch(mdFile.name)
+                            settingsDialogShown = false
+                            hack = !hack
+                        }
+                    )
                 }
             }
         )
-//        if (settingsDialogShown)
-//            ShowSettingsDialog { settingsDialogShown = false }
     }
-
-//    @Composable
-//    private fun ShowSettingsDialog(onClose: () -> Unit) {
-//
-//    }
 }

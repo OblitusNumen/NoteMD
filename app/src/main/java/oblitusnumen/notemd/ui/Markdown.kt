@@ -72,7 +72,7 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
 
                     Context.HEADING -> {
                         val textAnnotations = generateTextAnnotations(cacheC)
-                        val fontSize = (20 + 5 * (6 - previousLevelC))
+                        val fontSize = (16 + 8 * (6 - previousLevelC))
                         {
                             Spacer(modifier = Modifier.height(20.dp))
                             RenderAnnotatedText(
@@ -934,7 +934,6 @@ fun buildAnnotated(
                         }
 
                         TextAnnotationType.BEGIN_LINK -> {
-                            Log.v("log", "link:$link")
                             // You can style it visually
                             builder.addStyle(
                                 SpanStyle(

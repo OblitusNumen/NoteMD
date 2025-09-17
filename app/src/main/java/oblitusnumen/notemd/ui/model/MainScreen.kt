@@ -5,19 +5,15 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import oblitusnumen.notemd.ui.AddDialog
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
 
@@ -30,30 +26,6 @@ class MainScreen(private val dataManager: DataManager) {
             items(mdFiles) {
                 DrawMdProject(it) { openMd(it) }
             }
-//            item {
-//                Button(
-//                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 8.dp),
-//                    onClick = {
-//                        val context = dataManager.context
-//                        val intent =
-//                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/OblitusNumen/NihongoHelper"))
-//                        try {
-//                            context.startActivity(intent)
-//                        } catch (e: Exception) {
-//                            Log.e("BrowserIntent", "Error starting activity", e)
-//                            Toast.makeText(context, "Failed to open browser", Toast.LENGTH_SHORT).show()
-//                        }
-//                    }) {
-//                    Text(
-//                        modifier = Modifier.weight(1.0f).padding(start = 8.dp, end = 8.dp)
-//                            .align(Alignment.CenterVertically),
-//                        text = "Visit site",
-//                        style = MaterialTheme.typography.headlineSmall,
-//                        overflow = TextOverflow.Ellipsis,
-//                        maxLines = 1,
-//                    )
-//                }
-//            }
         }
     }
 
@@ -73,11 +45,6 @@ class MainScreen(private val dataManager: DataManager) {
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
             )
-//            Text(
-//                modifier = Modifier.align(Alignment.CenterVertically).padding(start = 8.dp, end = 8.dp),
-//                text = "${wordPool.countWords()} words",
-//                style = MaterialTheme.typography.bodyLarge,
-//            )
         }
         if (deleteDialogShown)
             DeleteDialog(mdFile) { deleteDialogShown = false }
@@ -110,64 +77,10 @@ class MainScreen(private val dataManager: DataManager) {
     }
 
     @Composable
-    fun AddDialog(openMd: (MdFile) -> Unit, onClose: () -> Unit) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { onClose() },
-            dismissButton = {
-                TextButton(onClick = { onClose() }) {
-                    Text("Cancel")
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val mdfile = MdFile(dataManager, name)
-                    if (mdfile.create(name)) {
-                        onClose()
-                        mdFiles += mdfile
-                        openMd(mdfile)
-                    } else {
-                        // TODO:
-                        dataManager.toast("Unable to create md with name $name")
-                    }
-                }) {
-                    Text("OK")
-                }
-            },
-            text = {
-                Row {
-                    val focusRequester = remember { FocusRequester() }
-                    var laidOut by remember { mutableStateOf(false) }
-                    OutlinedTextField(// FIXME: ui paddings
-                        isError = name.isEmpty(),
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .weight(1f)
-                            .onGloballyPositioned { laidOut = true }
-                            .focusRequester(focusRequester),
-                        value = name,
-                        onValueChange = {
-                            name = it
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Done
-                        ),
-                        label = { Text("Filename") }
-                    )
-                    LaunchedEffect(laidOut) {
-                        focusRequester.requestFocus()
-                    }
-                }
-            }
-        )
-    }
-
-    @Composable
     fun FunctionButton(openMd: (MdFile) -> Unit) {
         var addDialogShown by remember { mutableStateOf(false) }
         if (addDialogShown)
-            AddDialog(openMd) { addDialogShown = false }
+            AddDialog(dataManager, openMd) { addDialogShown = false }
         FloatingActionButton(onClick = { addDialogShown = true }) {
             Icon(Icons.Filled.Add, "Add md")
         }
@@ -185,5 +98,9 @@ class MainScreen(private val dataManager: DataManager) {
             title = { Text("NoteMD", maxLines = 1) },
             scrollBehavior = scrollBehavior,
         )
+    }
+
+    fun update() {
+        mdFiles = dataManager.getMdProjects()
     }
 }
