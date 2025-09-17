@@ -4,7 +4,9 @@ import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.HorizontalDivider
@@ -13,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
@@ -125,10 +128,27 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                     Context.LIST_ELEMENT -> {
                         val mdBlocks = parseMarkdown(markdown = cacheC, appContext = appContext);
                         {
-                            RenderMarkdownBlocks(
-                                modifier = Modifier.padding(start = (16 * previousLevelC).dp),
-                                mdBlocks
-                            )
+                            Row(Modifier.padding(start = (24 * previousLevelC).dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .conditional(previousLevelC == 1) {
+                                            this.border(
+                                                width = 1.dp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                shape = CircleShape
+                                            )
+                                        }
+                                        .conditional(previousLevelC != 1) {
+                                            this.background(
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                shape = if (previousLevelC == 0) CircleShape else RectangleShape
+                                            )
+                                        }
+                                        .padding(4.dp)
+                                )
+                                RenderMarkdownBlocks(markdownBlocks = mdBlocks)
+                            }
                         }
                     }
 
@@ -406,7 +426,7 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
         // a|a
         // -|-
         if (context != Context.TEXT && context != Context.LIST_ELEMENT// && context != Context.QUOTE
-            && current.trimEnd().lastOrNull() == '|' && symbol == '|' && split.size >= index + 1
+            && current.trimEnd().lastOrNull() == '|' && symbol == '|'
         ) {
             if (context == Context.TABLE) {
                 if (prevListSymbol == '-') {
@@ -420,7 +440,7 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                 }
             } else {
                 val pattern = Regex("^\\s*\\|([-]+\\|)+\\s*$")
-                if (pattern.matches(split[index + 1])) {
+                if (split.size > index + 1 && pattern.matches(split[index + 1])) {
                     val level = split[index + 1].count { it == '|' } - 1
                     val curLevel = current.count { it == '|' } - 1
                     if (curLevel == level) {
