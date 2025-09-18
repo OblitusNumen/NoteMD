@@ -2,6 +2,8 @@ package oblitusnumen.notemd.impl
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 
@@ -76,8 +78,25 @@ fun Modifier.leftSideColor(color: Color, width: Dp) = this.then(
         val stripWidth = width.toPx()
         drawRect(
             color = color,
-            topLeft = androidx.compose.ui.geometry.Offset(0f, 0f),
-            size = androidx.compose.ui.geometry.Size(stripWidth, size.height)
+            topLeft = Offset(0f, 0f),
+            size = Size(stripWidth, size.height)
         )
     }
 )
+
+data class ListElementParseResult(val number: Int?, val symbol: Char, val checked: Boolean?, val text: String, val textOffset: Int)
+
+fun parseListElement(line: String): ListElementParseResult? {
+    val regex = Regex("""^((([1-9]\d*)([.)])|([-*+]))(\s*\[([ xX])])? )(.*)$""")
+    val match = regex.find(line)
+    return match?.let {
+        println(it.groupValues)
+        ListElementParseResult(
+            it.groupValues[3].ifEmpty { null }?.toInt(),
+            it.groupValues[5].firstOrNull() ?: it.groupValues[4].first(),
+            it.groupValues[7].ifEmpty { null }?.equals("x", true),
+            it.groupValues[8],
+            it.groupValues[1].length
+        )
+    }
+}

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,10 +37,11 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
     var cache = ""
     var prevListSymbol = ' '
     var previousLevel: Int = -1
+    var listNumber: Int? = null
     var leadingWhitespace = 0
     var previousWhitespaces = 0
-    var previousSpace = 0 // space before the actual text (for nested blocks)
-    var checkbox: Int = -1
+    var previousTextOffset = 0 // space before the actual text (for nested blocks)
+    var checkbox: Boolean? = null
     var language = ""
     val pushBlock = {
         if (context != Context.NONE) {
@@ -47,10 +49,11 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
             val cacheC: String = cache
             val prevListSymbolC: Char = prevListSymbol
             val previousLevelC: Int = previousLevel
+            val listNumberC: Int? = listNumber
             val leadingWhitespaceC: Int = leadingWhitespace
             val previousWhitespacesC: Int = previousWhitespaces
-            val previousSpaceC: Int = previousSpace
-            val checkboxC: Int = checkbox
+            val previousTextOffsetC: Int = previousTextOffset
+            val checkboxC: Boolean? = checkbox
             val languageC: String = language
             // FIXME:
             val composable: @Composable () -> Unit =
@@ -129,24 +132,35 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                         val mdBlocks = parseMarkdown(markdown = cacheC, appContext = appContext);
                         {
                             Row(Modifier.padding(start = (24 * previousLevelC).dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .conditional(previousLevelC == 1) {
-                                            this.border(
-                                                width = 1.dp,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                shape = CircleShape
-                                            )
-                                        }
-                                        .conditional(previousLevelC != 1) {
-                                            this.background(
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                shape = if (previousLevelC == 0) CircleShape else RectangleShape
-                                            )
-                                        }
-                                        .padding(4.dp)
-                                )
+                                if (checkboxC == null) {
+                                    if (listNumberC == null) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp)
+                                                .conditional(previousLevelC == 1) {
+                                                    this.border(
+                                                        width = 1.dp,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        shape = CircleShape
+                                                    )
+                                                }
+                                                .conditional(previousLevelC != 1) {
+                                                    this.background(
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        shape = if (previousLevelC == 0) CircleShape else RectangleShape
+                                                    )
+                                                }
+                                                .padding(4.dp)
+                                        )
+                                    } else {
+                                        Text(text = "$listNumberC.", modifier = Modifier.padding(horizontal = 4.dp))
+                                    }
+                                } else {
+                                    Checkbox(
+                                        checked = checkboxC,
+                                        onCheckedChange = {}
+                                    )
+                                }
                                 RenderMarkdownBlocks(markdownBlocks = mdBlocks)
                             }
                         }
@@ -229,9 +243,10 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
             cache = ""
             prevListSymbol = ' '
             previousLevel = -1
+            listNumber = null
             previousWhitespaces = 0
-            previousSpace = 0
-            checkbox = -1
+            previousTextOffset = 0
+            checkbox = null
             language = ""
         }
     }
@@ -262,90 +277,104 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
             return@repeat
         }
 
-        // todo numbered, checklist
-        // bullet list start
-        val symbol = current.firstOrNull()
-        if (symbol == '+' || symbol == '-' || symbol == '*') {
-            var currentForList = current.substring(1)// |- "     [ ] text"| _OR_ |- "     text"|
-            var listWhitespaces = currentForList.countLeadingWhitespaces()
-            var curSpace = leadingWhitespace + 2
-            val checkChecklist = currentForList.substring(listWhitespaces)// "[ ] text"
-            var currentcb = -1
-            if (checkChecklist.startsWith("[ ] ") || checkChecklist.startsWith("[x] ", true)) {
-                currentcb = if (currentForList.startsWith('x', true)) 1 else 0
-                currentForList = currentForList.substring(4)// "text"
-                curSpace += leadingWhitespace + 5 + listWhitespaces // "|   |-|    |[ ] |"
-                listWhitespaces = currentForList.countLeadingWhitespaces() + 1
-            }
-            if (listWhitespaces != 0) {// - |
-                val curLevel = leadingWhitespace / 4
-                if (context == Context.LIST_ELEMENT) {
-                    if (curLevel > previousLevel) {
-                        if (leadingWhitespace - previousWhitespaces > 5) {
-                            cache += "\n" + currentForList
-                        } else {
-                            val curLevel = previousLevel + 1
-                            pushBlock()
-                            checkbox = currentcb
-                            previousLevel = curLevel
-                            context = Context.LIST_ELEMENT
-                            previousSpace = curSpace
-                            cache = currentForList//"text"
-                            previousWhitespaces = leadingWhitespace
-                            return@repeat
-                        }
-                    } else if (curLevel == previousLevel) {
-                        if (curLevel == 0) {
-                            val prevSymbol = prevListSymbol
-                            pushBlock()
-                            if (prevSymbol != symbol || leadingWhitespace != previousWhitespaces) {
-                                context = Context.SPACER
-                                pushBlock()
-                            }
-                            checkbox = currentcb
-                            previousLevel = 0
-                            prevListSymbol = symbol
-                            context = Context.LIST_ELEMENT
-                            previousSpace = curSpace
-                            cache = currentForList//"text"
-                            previousWhitespaces = leadingWhitespace
-                            return@repeat
-                        }
-                        if (leadingWhitespace == previousWhitespaces) {
-                            pushBlock()
-                            checkbox = currentcb
-                            previousLevel = curLevel
-                            context = Context.LIST_ELEMENT
-                            previousSpace = curSpace
-                            cache = currentForList//"text"
-                            previousWhitespaces = leadingWhitespace
-                            return@repeat
-                        } else {
-                            cache += "\n" + currentForList
-                            return@repeat
-                        }
-                    } else {
-                        cache += "\n" + currentForList
-                        return@repeat
-                    }
-                } else if (curLevel == 0) {
-                    val prevSymbol = prevListSymbol
+        // list start
+        val listElementParseResult = parseListElement(current)
+        if (listElementParseResult != null) {
+            val append =
+                "\n" + (if (leadingWhitespace > previousTextOffset) " ".repeat(leadingWhitespace - previousTextOffset) else "") + current
+            if (context != Context.LIST_ELEMENT) {
+                if (leadingWhitespace < 4) { // is not a text block
                     pushBlock()
-                    if (prevSymbol != symbol) {
-                        context = Context.SPACER
-                        pushBlock()
-                    }
-                    checkbox = currentcb
-                    previousLevel = 0
-                    prevListSymbol = symbol
+                    context = Context.SPACER
+                    pushBlock()
                     context = Context.LIST_ELEMENT
-                    previousSpace = curSpace
-                    cache = currentForList//"text"
+                    cache = listElementParseResult.text
+                    prevListSymbol = listElementParseResult.symbol
+                    previousLevel = 0
+                    listNumber = listElementParseResult.number
                     previousWhitespaces = leadingWhitespace
+                    previousTextOffset = listElementParseResult.textOffset
+                    checkbox = listElementParseResult.checked
                     return@repeat
                 }
-            }// else it is continuation of text
+            } else {
+                val prevSymbol = prevListSymbol
+                val curLevel = leadingWhitespace / 4
+                if (curLevel > previousLevel) {
+                    if (leadingWhitespace - previousWhitespaces > 5) {
+                        cache += append
+                    } else {
+                        val curLevel = previousLevel + 1
+                        pushBlock()
+                        context = Context.LIST_ELEMENT
+                        cache = listElementParseResult.text
+                        prevListSymbol = prevSymbol
+                        previousLevel = curLevel
+                        listNumber = listElementParseResult.number
+                        previousWhitespaces = leadingWhitespace
+                        previousTextOffset = listElementParseResult.textOffset
+                        checkbox = listElementParseResult.checked
+                    }
+                } else if (curLevel == previousLevel) {
+                    if (curLevel == 0) {
+                        pushBlock()
+                        if (prevSymbol != listElementParseResult.symbol || leadingWhitespace != previousWhitespaces) {
+                            context = Context.SPACER
+                            pushBlock()
+                        }
+                        context = Context.LIST_ELEMENT
+                        cache = listElementParseResult.text
+                        prevListSymbol = listElementParseResult.symbol
+                        previousLevel = 0
+                        listNumber = listElementParseResult.number
+                        previousWhitespaces = leadingWhitespace
+                        previousTextOffset = listElementParseResult.textOffset
+                        checkbox = listElementParseResult.checked
+                    } else if (leadingWhitespace == previousWhitespaces) { // is aligned with previous element, thus is next element
+                        pushBlock()
+                        context = Context.LIST_ELEMENT
+                        cache = listElementParseResult.text
+                        prevListSymbol = prevSymbol
+                        previousLevel = curLevel
+                        listNumber = listElementParseResult.number
+                        previousWhitespaces = leadingWhitespace
+                        previousTextOffset = listElementParseResult.textOffset
+                        checkbox = listElementParseResult.checked
+                    } else {
+                        cache += "\n" + append
+                    }
+                } else { // curlevel < prevlevel
+                    if (curLevel == 0) {
+                        pushBlock()
+                        if (prevSymbol != listElementParseResult.symbol || leadingWhitespace != previousWhitespaces) {
+                            context = Context.SPACER
+                            pushBlock()
+                        }
+                        context = Context.LIST_ELEMENT
+                        cache = listElementParseResult.text
+                        prevListSymbol = listElementParseResult.symbol
+                        previousLevel = 0
+                        listNumber = listElementParseResult.number
+                        previousWhitespaces = leadingWhitespace
+                        previousTextOffset = listElementParseResult.textOffset
+                        checkbox = listElementParseResult.checked
+                    } else {
+                        pushBlock()
+                        context = Context.LIST_ELEMENT
+                        cache = listElementParseResult.text
+                        prevListSymbol = prevSymbol
+                        previousLevel = curLevel
+                        listNumber = listElementParseResult.number
+                        previousWhitespaces = leadingWhitespace
+                        previousTextOffset = listElementParseResult.textOffset
+                        checkbox = listElementParseResult.checked
+                    }
+                }
+                return@repeat
+            }
         }
+
+        val symbol = current.firstOrNull()
 
         // quote
         if (context == Context.QUOTE) {
@@ -359,8 +388,8 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
 
         // list
         if (context == Context.LIST_ELEMENT) {
-            if (leadingWhitespace - previousSpace > 0)
-                current.addLeadingSpaces(leadingWhitespace - previousSpace)
+            if (leadingWhitespace - previousTextOffset > 0)
+                current.addLeadingSpaces(leadingWhitespace - previousTextOffset)
             cache += "\n" + current
             return@repeat
         }
