@@ -10,19 +10,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import oblitusnumen.notemd.ui.AddDialog
+import kotlinx.coroutines.launch
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
 import oblitusnumen.notemd.impl.ViewType
+import oblitusnumen.notemd.ui.AddDialog
 import oblitusnumen.notemd.ui.model.MainScreen
 import oblitusnumen.notemd.ui.model.MdView
 import oblitusnumen.notemd.ui.parseMarkdown
@@ -124,18 +123,27 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     if (mdContent != null) {
                         Row {
+                            val lazyListState = rememberLazyListState()
+                            val coroutineScope = rememberCoroutineScope()
                             LazyColumn(
-                                Modifier.padding(innerPadding).padding(horizontal = 10.dp)
+                                Modifier.padding(innerPadding).padding(horizontal = 10.dp),
+                                lazyListState,
                             ) {
-                                items(
-                                    if (mdContent != null) {
-                                        parseMarkdown(
-                                            this@MainActivity,
-                                            mdContent!!
-                                        )
-                                    } else listOf()
-                                ) {
-                                    it()
+                                if (mdContent != null) {
+                                    var headingLinks: Map<String, Int> = mapOf()
+                                    val parseResult = parseMarkdown(
+                                        this@MainActivity,
+                                        mdContent!!,
+                                        {
+                                            coroutineScope.launch {
+                                                headingLinks[it]?.let { lazyListState.animateScrollToItem(it) }
+                                            }
+                                        }
+                                    )
+                                    headingLinks = parseResult.headings
+                                    items(parseResult.blocks) {
+                                        it()
+                                    }
                                 }
                             }
                         }

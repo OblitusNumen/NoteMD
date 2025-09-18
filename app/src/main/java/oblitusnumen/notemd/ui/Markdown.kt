@@ -30,8 +30,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import oblitusnumen.notemd.impl.*
 
-fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@Composable () -> Unit> {
+class MarkdownParseResult(val blocks: List<@Composable () -> Unit>, val headings: Map<String, Int>)
+
+fun parseMarkdown(
+    appContext: android.content.Context,
+    markdown: String,
+    headingLinksHandler: (String) -> Unit
+): MarkdownParseResult {
     val blocks: MutableList<Pair<Context, @Composable () -> Unit>> = mutableListOf()
+    val headings: MutableMap<String, Int> = mutableMapOf()
     val split = markdown.split('\n')
     var context: Context = Context.NONE
     var cache = ""
@@ -66,8 +73,9 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                             RenderAnnotatedText(
                                 appContext,
                                 annotations,
+                                headingLinksHandler,
                                 MaterialTheme.typography.bodyMedium.toParagraphStyle(),
-                                MaterialTheme.typography.bodyMedium.toSpanStyle()
+                                MaterialTheme.typography.bodyMedium.toSpanStyle(),
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                         }
@@ -75,12 +83,17 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
 
                     Context.HEADING -> {
                         val textAnnotations = generateTextAnnotations(cacheC)
+                        val headingLink =
+                            cacheC.trim().normalizeWhitespaces().replace(' ', '-')
+                                .replace(Regex("[^\\p{L}0-9-_]"), "").lowercase()
+                        headings.put(headingLink, blocks.size)
                         val fontSize = (16 + 8 * (6 - previousLevelC))
                         {
                             Spacer(modifier = Modifier.height(20.dp))
                             RenderAnnotatedText(
                                 appContext,
                                 textAnnotations,
+                                headingLinksHandler,
                                 paragraphStyle = MaterialTheme.typography.headlineLarge.copy(
                                     lineHeight = fontSize.sp,
                                     fontSize = fontSize.sp
@@ -88,14 +101,15 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                                 spanStyle = MaterialTheme.typography.headlineLarge.copy(
                                     lineHeight = fontSize.sp,
                                     fontSize = fontSize.sp
-                                ).toSpanStyle()
+                                ).toSpanStyle(),
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
                     Context.QUOTE -> {
-                        val mdBlocks = parseMarkdown(markdown = cacheC, appContext = appContext);
+                        val mdBlocks =
+                            parseMarkdown(markdown = cacheC, appContext = appContext, headingLinksHandler = headingLinksHandler).blocks;
                         {
                             Spacer(modifier = Modifier.height(10.dp))
                             Box(
@@ -129,7 +143,8 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                     }
 
                     Context.LIST_ELEMENT -> {
-                        val mdBlocks = parseMarkdown(markdown = cacheC, appContext = appContext);
+                        val mdBlocks =
+                            parseMarkdown(markdown = cacheC, appContext = appContext, headingLinksHandler = headingLinksHandler).blocks;
                         {
                             Row(Modifier.padding(start = (24 * previousLevelC).dp)) {
                                 if (checkboxC == null) {
@@ -190,7 +205,7 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
                             val cells: MutableList<@Composable () -> Unit> = mutableListOf()
                             for (string in row.split('|')) {
                                 val textAnnotations = generateTextAnnotations(string.trim())
-                                cells.add({ RenderAnnotatedText(appContext, textAnnotations) })
+                                cells.add({ RenderAnnotatedText(appContext, textAnnotations, headingLinksHandler) })
                             }
                             rows.add(cells)
                             if (maxInRow < cells.size) {
@@ -517,7 +532,7 @@ fun parseMarkdown(appContext: android.content.Context, markdown: String): List<@
         cache += "\n" + current
     }
     pushBlock()
-    return blocks.map { it.second }
+    return MarkdownParseResult(blocks.map { it.second }, headings)
 }
 
 @Composable
@@ -533,11 +548,6 @@ fun RenderMarkdownBlocks(modifier: Modifier = Modifier, markdownBlocks: List<@Co
 //            it.second()
 //        }
 //    }
-}
-
-@Composable
-fun MarkdownView(modifier: Modifier = Modifier, appContext: android.content.Context, markdown: String) {
-    RenderMarkdownBlocks(modifier, parseMarkdown(appContext, markdown))
 }
 
 class Pointers {
@@ -659,7 +669,6 @@ fun parseText(annotations: MutableList<Pair<TextAnnotationType, String>>, text: 
             }
         }
         if (word.isNotEmpty()) {
-            var firstLoop = true
             while (true) {
                 val symbol = word.first()
                 val countLeading = word.countLeading(symbol)
@@ -762,7 +771,6 @@ fun parseText(annotations: MutableList<Pair<TextAnnotationType, String>>, text: 
                     changePreviousAnnotation(word)
                     break
                 }
-                firstLoop = false
             }
         }
 
@@ -1033,6 +1041,7 @@ fun buildAnnotated(
 fun RenderAnnotatedText(
     appContext: android.content.Context,
     annotations: List<Pair<TextAnnotationType, String>>,
+    headingLinksHandler: (String) -> Unit,
     paragraphStyle: ParagraphStyle? = null,
     spanStyle: SpanStyle? = null,
 ) {
@@ -1043,9 +1052,14 @@ fun RenderAnnotatedText(
         onClick = { offset ->
             annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
                 .firstOrNull()?.let { annotation ->
+                    val link = annotation.item
+                    if (link.firstOrNull() == '#') {
+                        headingLinksHandler(link.substring(1).lowercase())
+                        return@let
+                    }
                     try {
                         val intent =
-                            Intent(Intent.ACTION_VIEW, annotation.item.toUri())
+                            Intent(Intent.ACTION_VIEW, link.toUri())
                         appContext.startActivity(intent)
                     } catch (e: Exception) {
                         Log.e("BrowserIntent", "Error starting activity", e)

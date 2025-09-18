@@ -13,9 +13,12 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import oblitusnumen.notemd.impl.DataManager
 import oblitusnumen.notemd.impl.MdFile
 import oblitusnumen.notemd.impl.ViewType
@@ -37,16 +40,52 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
             remember { content }
             val previewScroll = rememberScrollState()
             val md = viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.MD
-            val markdownBlocks =
-                remember(content) { parseMarkdown(appContext = dataManager.context, markdown = content.text) }
+            val scrollState = rememberScrollState()
+            val coroutineScope = rememberCoroutineScope()
+            var headingLinks: Map<String, Int> = remember { mapOf() }
+            val itemPositions = remember { mutableStateMapOf<Int, Int>() }
+            val positionsWrapped = remember {
+                {
+                    itemPositions
+                }
+            }
+            val parseResult =
+                remember(content) {
+                    parseMarkdown(appContext = dataManager.context, markdown = content.text, headingLinksHandler = { link ->
+                        coroutineScope.launch {
+                            headingLinks[link].let {
+                                positionsWrapped()[it]?.let { y ->
+                                    scrollState.animateScrollTo(y)
+                                }
+                            }
+                        }
+                    })
+                }
+            headingLinks = remember(parseResult) { parseResult.headings }
             Box(
                 (if (md) Modifier.weight(1f) else Modifier)
-                    .verticalScroll(previewScroll)
             ) {
                 if (md) {
-                    Column(Modifier.padding(horizontal = 10.dp)) {
-                        markdownBlocks.forEach {
-                            it()
+                    val items = parseResult.blocks
+
+                    Column {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 10.dp)
+                                .verticalScroll(scrollState)
+                        ) {
+                            items.forEachIndexed { index, block ->
+                                Column(
+                                    modifier = Modifier
+                                        .onGloballyPositioned { layoutCoordinates ->
+                                            // Save the Y position of this item relative to the column
+                                            itemPositions[index] = layoutCoordinates.positionInParent().y.toInt()
+                                        }
+                                ) {
+                                    block()
+                                }
+                            }
                         }
                     }
                 }

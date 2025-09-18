@@ -90,7 +90,6 @@ fun parseListElement(line: String): ListElementParseResult? {
     val regex = Regex("""^((([1-9]\d*)([.)])|([-*+]))(\s*\[([ xX])])? )(.*)$""")
     val match = regex.find(line)
     return match?.let {
-        println(it.groupValues)
         ListElementParseResult(
             it.groupValues[3].ifEmpty { null }?.toInt(),
             it.groupValues[5].firstOrNull() ?: it.groupValues[4].first(),
