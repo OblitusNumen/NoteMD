@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -68,7 +69,7 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                 if (md) {
                     val items = parseResult.blocks
 
-                    Column {
+                    SelectionContainer {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()

@@ -5,18 +5,26 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
@@ -109,7 +117,11 @@ fun parseMarkdown(
 
                     Context.QUOTE -> {
                         val mdBlocks =
-                            parseMarkdown(markdown = cacheC, appContext = appContext, headingLinksHandler = headingLinksHandler).blocks;
+                            parseMarkdown(
+                                markdown = cacheC,
+                                appContext = appContext,
+                                headingLinksHandler = headingLinksHandler
+                            ).blocks;
                         {
                             Spacer(modifier = Modifier.height(10.dp))
                             Box(
@@ -144,7 +156,11 @@ fun parseMarkdown(
 
                     Context.LIST_ELEMENT -> {
                         val mdBlocks =
-                            parseMarkdown(markdown = cacheC, appContext = appContext, headingLinksHandler = headingLinksHandler).blocks;
+                            parseMarkdown(
+                                markdown = cacheC,
+                                appContext = appContext,
+                                headingLinksHandler = headingLinksHandler
+                            ).blocks;
                         {
                             Row(Modifier.padding(start = (24 * previousLevelC).dp)) {
                                 if (checkboxC == null) {
@@ -237,13 +253,26 @@ fun parseMarkdown(
                                 ) {
                                     Text(
                                         text = languageC,
+                                        modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontFamily = FontFamily.Monospace
                                     )
-                                    // TODO: copy button
+                                    val clipboardManager = LocalClipboardManager.current
+                                    IconButton(
+                                        modifier = Modifier.align(Alignment.CenterVertically).size(MaterialTheme.typography.bodyMedium.fontSize.value.dp),
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(cacheC))
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Copy to clipboard"
+                                        )
+                                    }
                                 }
+                                val scrollState = rememberScrollState()
                                 Text(
-                                    modifier = Modifier.padding(5.dp),
+                                    modifier = Modifier.padding(5.dp).horizontalScroll(scrollState),
                                     text = cacheC,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontFamily = FontFamily.Monospace
@@ -946,7 +975,12 @@ fun buildAnnotated(
                                 ),
                                 start, end
                             )
-                            // TODO: copy on click
+                            builder.addStringAnnotation(
+                                tag = "COPY",
+                                annotation = value,
+                                start = start,
+                                end = end
+                            )
                         }
 
                         TextAnnotationType.BEGIN_STRIKETHROUGH -> {
@@ -980,12 +1014,21 @@ fun buildAnnotated(
                                 start, end
                             )
                             // And also attach the URL as a StringAnnotation
-                            builder.addStringAnnotation(
-                                tag = "URL",
-                                annotation = link,
-                                start = start,
-                                end = end
-                            )
+                            if (link.firstOrNull() == '#') {
+                                link.substring(1).lowercase()
+                                builder.addStringAnnotation(
+                                    tag = "HEADING_LINK",
+                                    annotation = link,
+                                    start = start,
+                                    end = end
+                                )
+                            } else
+                                builder.addStringAnnotation(
+                                    tag = "URL",
+                                    annotation = link,
+                                    start = start,
+                                    end = end
+                                )
                         }
 
                         TextAnnotationType.BEGIN_PIC -> {
@@ -1045,19 +1088,27 @@ fun RenderAnnotatedText(
     paragraphStyle: ParagraphStyle? = null,
     spanStyle: SpanStyle? = null,
 ) {
-    val uriHandler = LocalUriHandler.current
+    LocalUriHandler.current
     val annotated = buildAnnotated(annotations, paragraphStyle, spanStyle)
+    val clipboardManager = LocalClipboardManager.current
     ClickableText(
         text = annotated,
         onClick = { offset ->
-            annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
+            annotated.getStringAnnotations(tag = "COPY", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    clipboardManager.setText(AnnotatedString(annotation.item))
+                }
+            annotated.getStringAnnotations(tag = "HEADING_LINK", start = offset, end = offset)
                 .firstOrNull()?.let { annotation ->
                     val link = annotation.item
                     if (link.firstOrNull() == '#') {
                         headingLinksHandler(link.substring(1).lowercase())
-                        return@let
                     }
+                }
+            annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
                     try {
+                        val link = annotation.item
                         val intent =
                             Intent(Intent.ACTION_VIEW, link.toUri())
                         appContext.startActivity(intent)
