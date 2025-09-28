@@ -5,17 +5,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,54 +37,34 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
         Column(
             modifier = modifier.fillMaxSize().conditional(viewType == ViewType.SOURCE) { imePadding() }
         ) {
-            remember { content }
-            val previewScroll = rememberScrollState()
             val md = viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.MD
-            val scrollState = rememberScrollState()
-            val coroutineScope = rememberCoroutineScope()
-            var headingLinks: Map<String, Int> = remember { mapOf() }
-            val itemPositions = remember { mutableStateMapOf<Int, Int>() }
-            val positionsWrapped = remember {
-                {
-                    itemPositions
-                }
-            }
-            val parseResult =
-                remember(content) {
-                    parseMarkdown(appContext = dataManager.context, markdown = content.text, headingLinksHandler = { link ->
-                        coroutineScope.launch {
-                            headingLinks[link].let {
-                                positionsWrapped()[it]?.let { y ->
-                                    scrollState.animateScrollTo(y)
-                                }
-                            }
-                        }
-                    })
-                }
-            headingLinks = remember(parseResult) { parseResult.headings }
             Box(
                 (if (md) Modifier.weight(1f) else Modifier)
             ) {
                 if (md) {
-                    val items = parseResult.blocks
-
-                    SelectionContainer {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 10.dp)
-                                .verticalScroll(scrollState)
-                        ) {
-                            items.forEachIndexed { index, block ->
-                                Column(
-                                    modifier = Modifier
-                                        .onGloballyPositioned { layoutCoordinates ->
-                                            // Save the Y position of this item relative to the column
-                                            itemPositions[index] = layoutCoordinates.positionInParent().y.toInt()
-                                        }
-                                ) {
-                                    block()
+                    var headingLinks: Map<String, Int> = remember { mapOf() }
+                    val lazyListState = rememberLazyListState()
+                    val coroutineScope = rememberCoroutineScope()
+                    val parseResult =
+                        remember(content) {
+                            parseMarkdown(
+                                dataManager.context,
+                                content.text,
+                                {
+                                    coroutineScope.launch {
+                                        headingLinks[it]?.let { lazyListState.animateScrollToItem(it) }
+                                    }
                                 }
+                            )
+                        }
+                    headingLinks = remember(parseResult) { parseResult.headings }
+                    SelectionContainer {
+                        LazyColumn(
+                            Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                            lazyListState,
+                        ) {
+                            items(parseResult.blocks) {
+                                it()
                             }
                         }
                     }
@@ -95,25 +74,20 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
             HorizontalDivider()
 
             if (viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.SOURCE) {
-                Box(
+                TextField(
+                    value = content,
+                    onValueChange = { newValue ->
+                        // TODO: undo history
+                        content = newValue
+                        mdFile.content = content.text
+                    },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp),
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    TextField(
-                        value = content,
-                        onValueChange = { newValue ->
-                            // TODO: undo history
-                            content = newValue
-                            mdFile.content = content.text
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp),
-                        modifier = Modifier
-                            .fillMaxSize(),
-                        singleLine = false,
-                        maxLines = Int.MAX_VALUE,
-                    )
-                }
+                        .fillMaxSize(),
+                    singleLine = false,
+                    maxLines = Int.MAX_VALUE,
+                )
             }
 
             if (viewType == ViewType.CHAT) {
@@ -125,7 +99,7 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
     fun onBackPress(then: () -> Unit) {
         if (mdFile.viewType == ViewType.MD_WITH_SOURCE || mdFile.viewType == ViewType.SOURCE) {
             mdFile.viewType = ViewType.MD
-            hack = ! hack
+            hack = !hack
             return
         }
         mdFile.content = content.text
