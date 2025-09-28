@@ -6,7 +6,7 @@ class MdFile {
     private val dataManager: DataManager
     private val contentFile: File
     val name: String get() = contentFile.name
-    var viewType: ViewType = ViewType.CHAT // FIXME:
+    var viewType: ViewType = ViewType.MD_WITH_SOURCE // FIXME:
         set(value) {
             field = value
             save()
@@ -69,7 +69,7 @@ class MdFile {
         synchronized(this) {
             if (!nameValid(dataManager, name) || !contentFile.createNewFile())
                 return false
-            contentFile.writeText(ViewType.CHAT.toStringValue())
+            contentFile.writeText(ViewType.MD_WITH_SOURCE.toStringValue()) // FIXME:
             return true
         }
     }
