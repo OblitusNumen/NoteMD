@@ -470,20 +470,13 @@ fun parseMarkdown(
         // divider
         if (symbol == '_' || symbol == '-' || symbol == '*') {
             if (current.countLeading(symbol) >= 3 && current.trimLeading(symbol).trim().isEmpty()) {
-                if (context == Context.DIVIDER) {
-                    if (symbol == '-' && !cache.contains('\n')) {
-                        context = Context.HEADING
-                        previousLevel = 2
-                    }
-                    pushBlock()
-                    return@repeat
-                }
-                if (context == Context.TEXT && symbol == '-' && !cache.contains('\n')) {
+                if (symbol == '-' && (context == Context.TEXT || context == Context.DIVIDER) && !cache.contains('\n')) {
                     context = Context.HEADING
                     previousLevel = 2
                     pushBlock()
                     return@repeat
                 }
+                pushBlock()
                 context = Context.DIVIDER
                 cache = current
                 return@repeat
@@ -491,7 +484,6 @@ fun parseMarkdown(
         }
         if (context == Context.DIVIDER) {
             pushBlock()
-            return@repeat
         }
 
         // table
