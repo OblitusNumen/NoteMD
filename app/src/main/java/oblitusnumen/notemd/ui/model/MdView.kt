@@ -122,15 +122,21 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
         }
     }
 
-    fun onBackPress() {
+    fun onBackPress(then: () -> Unit) {
+        if (mdFile.viewType == ViewType.MD_WITH_SOURCE || mdFile.viewType == ViewType.SOURCE) {
+            mdFile.viewType = ViewType.MD
+            hack = ! hack
+            return
+        }
         mdFile.content = content.text
+        then()
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun TopBar(backPress: () -> Unit) {
         val onBackPress = {
-            onBackPress()
+            mdFile.content = content.text
             backPress()
         }
         var settingsDialogShown by remember { mutableStateOf(false) }

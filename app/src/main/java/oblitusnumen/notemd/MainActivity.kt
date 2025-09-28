@@ -161,8 +161,7 @@ class MainActivity : ComponentActivity() {
                             mainScreen.Compose(Modifier.padding(innerPadding), openMd)
                         } else {
                             BackHandler {
-                                mdView!!.onBackPress()
-                                mdView = null
+                                mdView!!.onBackPress { mdView = null }
                             }
                             mdView!!.Compose(Modifier.padding(innerPadding))
                         }
