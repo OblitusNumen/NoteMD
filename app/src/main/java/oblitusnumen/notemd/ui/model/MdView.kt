@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -70,8 +71,6 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                     }
                 }
             }
-
-            HorizontalDivider()
 
             if (viewType == ViewType.MD_WITH_SOURCE || viewType == ViewType.SOURCE) {
                 TextField(
@@ -198,5 +197,18 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
                 }
             }
         )
+    }
+
+    @Composable
+    fun FunctionButton() {
+        hack
+        if (mdFile.viewType == ViewType.MD)
+            FloatingActionButton(onClick = {
+                mdFile.viewType =
+                    ViewType.MD_WITH_SOURCE
+                hack = !hack
+            }) {
+                Icon(Icons.Filled.Edit, "Add md")
+            }
     }
 }

@@ -119,6 +119,8 @@ class MainActivity : ComponentActivity() {
                         if (mdContent == null) {
                             if (mdView == null)
                                 mainScreen.FunctionButton(openMd)
+                            else
+                                mdView!!.FunctionButton()
                         }
                     }
                 ) { innerPadding ->
