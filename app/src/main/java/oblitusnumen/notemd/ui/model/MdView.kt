@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +91,7 @@ class MdView(private val dataManager: DataManager, var mdFile: MdFile) {
             }
 
             if (viewType == ViewType.CHAT) {
+                Text("--Not yet implemented--", color = Color.Red)
                 // TODO: ViewType.CHAT
             }
         }
