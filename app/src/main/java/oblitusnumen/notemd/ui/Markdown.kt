@@ -13,12 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -210,7 +205,7 @@ fun parseMarkdown(
                     }
 
                     Context.TABLE -> {
-                        val rows = mutableListOf<List<@Composable () -> Unit>>()
+                        val rows = mutableListOf<MutableList<@Composable () -> Unit>>()
                         var maxInRow = 0
                         cacheC.split('\n').forEach {
                             var row = it.trim()
@@ -227,6 +222,9 @@ fun parseMarkdown(
                             if (maxInRow < cells.size) {
                                 maxInRow = cells.size
                             }
+                        }
+                        rows.forEach {
+                            it.extendToSize(maxInRow) { {} }
                         }
                         val header = rows.removeAt(0);
                         {
@@ -259,7 +257,8 @@ fun parseMarkdown(
                                     )
                                     val clipboardManager = LocalClipboardManager.current
                                     IconButton(
-                                        modifier = Modifier.align(Alignment.CenterVertically).size(MaterialTheme.typography.bodyMedium.fontSize.value.dp),
+                                        modifier = Modifier.align(Alignment.CenterVertically)
+                                            .size(MaterialTheme.typography.bodyMedium.fontSize.value.dp),
                                         onClick = {
                                             clipboardManager.setText(AnnotatedString(cacheC))
                                         }

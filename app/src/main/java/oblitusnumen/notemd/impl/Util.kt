@@ -99,3 +99,11 @@ fun parseListElement(line: String): ListElementParseResult? {
         )
     }
 }
+
+fun <T> MutableList<T>.extendToSize(size: Int, defaultValue: () -> T) {
+    if (this.size < size) {
+        repeat(size - this.size) {
+            this.add(defaultValue())
+        }
+    }
+}
